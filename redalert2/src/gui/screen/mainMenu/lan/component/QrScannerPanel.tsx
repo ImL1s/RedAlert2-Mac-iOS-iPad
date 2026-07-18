@@ -1,0 +1,244 @@
+import React, { useEffect, useEffectEvent, useRef, useState } from 'react';
+import jsQR from 'jsqr';
+
+interface QrScannerPanelProps {
+    onDetected: (payloadText: string) => Promise<void>;
+}
+
+async function decodeQrFromFile(file: File): Promise<string | undefined> {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+
+    const context = canvas.getContext('2d', {
+        willReadFrequently: true,
+    });
+    if (!context) {
+        throw new Error('Unable to create the QR code scanning canvas.');
+    }
+
+    context.drawImage(bitmap, 0, 0);
+    const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+    const result = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'attemptBoth',
+    });
+    return result?.data;
+}
+
+export const QrScannerPanel: React.FC<QrScannerPanelProps> = ({ onDetected }) => {
+    const videoRef = useRef<HTMLVideoElement | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const frameRequestRef = useRef<number | undefined>(undefined);
+    const streamRef = useRef<MediaStream | undefined>(undefined);
+
+    const [active, setActive] = useState(false);
+    const [busy, setBusy] = useState(false);
+    const [errorText, setErrorText] = useState<string>();
+    const [lastDetectedText, setLastDetectedText] = useState<string>();
+    const handleDetected = useEffectEvent(onDetected);
+
+    const stopScanner = () => {
+        if (frameRequestRef.current) {
+            cancelAnimationFrame(frameRequestRef.current);
+            frameRequestRef.current = undefined;
+        }
+        streamRef.current?.getTracks().forEach((track) => track.stop());
+        streamRef.current = undefined;
+        if (videoRef.current) {
+            videoRef.current.srcObject = null;
+        }
+        setActive(false);
+    };
+
+    useEffect(() => stopScanner, []);
+
+    useEffect(() => {
+        if (!active) {
+            return;
+        }
+
+        let cancelled = false;
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d', {
+            willReadFrequently: true,
+        });
+        if (!context) {
+            setErrorText('Unable to create the QR code scanning canvas.');
+            setActive(false);
+            return;
+        }
+
+        const scanLoop = async () => {
+            if (cancelled) {
+                return;
+            }
+
+            const video = videoRef.current;
+            if (video && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+                const width = video.videoWidth || 0;
+                const height = video.videoHeight || 0;
+                if (width > 0 && height > 0) {
+                    canvas.width = width;
+                    canvas.height = height;
+                    context.drawImage(video, 0, 0, width, height);
+                    const imageData = context.getImageData(0, 0, width, height);
+                    const result = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: 'attemptBoth',
+                    });
+                    if (result?.data && result.data !== lastDetectedText && !busy) {
+                        setBusy(true);
+                        setLastDetectedText(result.data);
+                        try {
+                            await handleDetected(result.data);
+                            stopScanner();
+                            setErrorText(undefined);
+                            setBusy(false);
+                            return;
+                        }
+                        catch (error) {
+                            setErrorText((error as Error).message);
+                        }
+                        finally {
+                            setBusy(false);
+                        }
+                    }
+                }
+            }
+
+            frameRequestRef.current = requestAnimationFrame(() => {
+                scanLoop().catch((error) => {
+                    setErrorText((error as Error).message);
+                    stopScanner();
+                });
+            });
+        };
+
+        navigator.mediaDevices
+            ?.getUserMedia({
+                video: {
+                    facingMode: 'environment',
+                },
+                audio: false,
+            })
+            .then((stream) => {
+                if (cancelled) {
+                    stream.getTracks().forEach((track) => track.stop());
+                    return;
+                }
+
+                streamRef.current = stream;
+                const video = videoRef.current;
+                if (!video) {
+                    stopScanner();
+                    return;
+                }
+
+                video.srcObject = stream;
+                video.setAttribute('playsinline', 'true');
+                video.play().catch((error) => {
+                    setErrorText((error as Error).message);
+                    stopScanner();
+                });
+                scanLoop().catch((error) => {
+                    setErrorText((error as Error).message);
+                    stopScanner();
+                });
+            })
+            .catch((error) => {
+                setErrorText((error as Error).message);
+                stopScanner();
+            });
+
+        return () => {
+            cancelled = true;
+            stopScanner();
+        };
+    }, [active, busy, lastDetectedText]);
+
+    const handleImportImage = async (file: File | undefined) => {
+        if (!file) {
+            return;
+        }
+        setBusy(true);
+        try {
+            const decoded = await decodeQrFromFile(file);
+            if (!decoded) {
+                throw new Error('No QR code was found in the image.');
+            }
+            setLastDetectedText(decoded);
+            await handleDetected(decoded);
+            setErrorText(undefined);
+        }
+        catch (error) {
+            setErrorText((error as Error).message);
+        }
+        finally {
+            setBusy(false);
+            if (fileInputRef.current) {
+                fileInputRef.current.value = '';
+            }
+        }
+    };
+
+    return (
+        <div className="lan-panel lan-scanner-panel" data-lan-card="scanner">
+            <div className="lan-panel-header">
+                <h3>Scan to Join</h3>
+                <span>Supports camera scanning and image import.</span>
+            </div>
+
+            <div className="lan-scanner-preview">
+                {active ? (
+                    <video ref={videoRef} muted={true} autoPlay={true} />
+                ) : (
+                    <div className="lan-qr-placeholder">
+                        Camera is off. You can also import a QR code image directly.
+                    </div>
+                )}
+            </div>
+
+            <div className="lan-actions">
+                <button
+                    type="button"
+                    className="dialog-button"
+                    disabled={busy}
+                    data-lan-action={active ? 'stop-scanner' : 'start-scanner'}
+                    onClick={() => {
+                        if (active) {
+                            stopScanner();
+                            return;
+                        }
+                        setErrorText(undefined);
+                        setActive(true);
+                    }}
+                >
+                    {active ? 'Stop Scanning' : 'Start Camera Scan'}
+                </button>
+                <button
+                    type="button"
+                    className="dialog-button"
+                    disabled={busy}
+                    onClick={() => fileInputRef.current?.click()}
+                >
+                    Import QR Code Image
+                </button>
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="lan-hidden-input"
+                    onChange={(event) => {
+                        handleImportImage(event.target.files?.[0]).catch((error) => {
+                            setErrorText((error as Error).message);
+                        });
+                    }}
+                />
+            </div>
+
+            {errorText ? (
+                <div className="lan-error-text">{errorText}</div>
+            ) : null}
+        </div>
+    );
+};

@@ -1,0 +1,33 @@
+# --- Game assets: NEVER commit retail-derived files ---
+# Produced by scripts/prepare-gameres.ts from a legally-owned RA2 install.
+gameres-export/
+ios/Resources/GameRes/
+ios/Resources/WebDist/
+redalert2/public/local-pack/
+# Retail English string table, extracted from your language.mix at import time.
+redalert2/public/general.csf
+# Chinese original, kept locally as a reference backup only.
+redalert2/public/general.zh-CN.csf
+
+# --- Dependencies ---
+node_modules/
+redalert2/node_modules/
+.bun/
+
+# --- Build output ---
+redalert2/dist/
+build/
+DerivedData/
+*.xcodeproj/xcuserdata/
+ios/RA2.xcodeproj/
+
+# --- Xcode / macOS ---
+.DS_Store
+*.xcuserstate
+xcuserdata/
+
+# --- Editor / misc ---
+*.log
+.vscode/
+.idea/
+certs/

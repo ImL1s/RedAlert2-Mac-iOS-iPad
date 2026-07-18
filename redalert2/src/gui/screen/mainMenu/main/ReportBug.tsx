@@ -1,0 +1,25 @@
+import React from 'react';
+import { Strings } from '../../../../data/Strings';
+export interface ReportBugProps {
+    discordUrl?: string;
+    strings: Strings;
+}
+export const ReportBug: React.FC<ReportBugProps> = ({ discordUrl, strings }) => {
+    return (<div style={{ padding: '20px', color: 'white' }}>
+      <div style={{ marginBottom: '15px' }}>
+        {strings.get('TS:ReportBugDesc') || 'You can submit bug reports in the dedicated channel on our Discord server. Click the link below:'}
+      </div>
+      
+      {discordUrl && (<div style={{ textAlign: 'center' }}>
+          <a href={discordUrl} target="_blank" rel="noopener noreferrer" style={{
+                color: '#00ff00',
+                textDecoration: 'underline',
+                fontSize: '16px'
+            }} onClick={() => {
+                window.gtag?.('event', 'discord_click');
+            }}>
+            {discordUrl}
+          </a>
+        </div>)}
+    </div>);
+};
