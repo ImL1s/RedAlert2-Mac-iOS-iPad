@@ -203,6 +203,7 @@ export class SceneSandboxTester {
     };
 
     static async main(_mixFileLoader: any, gameMapFile: any, parentElement: HTMLElement, strings: StringsLike, context: TestToolRuntimeContext = {}, options: SceneSandboxOptions = {}): Promise<void> {
+        (window as any).__sandbox = this;
         const theaterType = gameMapFile.theaterType ?? TheaterType.Temperate;
         await TestToolSupport.ensureTheater(theaterType, context.cdnResourceLoader, [
             ResourceType.UiAlly,

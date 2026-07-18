@@ -19,15 +19,31 @@ interface SeedManifest {
 export function installShellDebugLog(): void {
     if (!isNativeShell())
         return;
+    // Override with RA2_DEBUG_LOG_HOST at build time to reach a dev machine on
+    // the LAN (device localhost can't). Falls back to loopback for the sim.
+    const host = (import.meta as any).env?.VITE_DEBUG_LOG_HOST || '127.0.0.1';
+    const endpoint = `http://${host}:4100/log`;
+    const safeArg = (a: unknown): string => {
+        if (a instanceof Error)
+            return `${a.name}: ${a.message}\n${a.stack ?? '(no stack)'}`;
+        if (a === null || a === undefined)
+            return String(a);
+        if (typeof a !== 'object')
+            return String(a).slice(0, 2000);
+        // Never serialize binary blobs or huge structures over the wire.
+        if (ArrayBuffer.isView(a) || a instanceof ArrayBuffer)
+            return `[binary ${(a as any).byteLength ?? '?'}b]`;
+        try {
+            return JSON.stringify(a).slice(0, 2000);
+        }
+        catch {
+            return Object.prototype.toString.call(a);
+        }
+    };
     const post = (level: string, args: unknown[]) => {
         try {
-            const text = args
-                .map((a) => (typeof a === 'object' ? JSON.stringify(a) : String(a)))
-                .join(' ');
-            void fetch('http://127.0.0.1:4100/log', {
-                method: 'POST',
-                body: `[${level}] ${text}`,
-            }).catch(() => { });
+            const text = args.map(safeArg).join(' ').slice(0, 4000);
+            void fetch(endpoint, { method: 'POST', body: `[${level}] ${text}` }).catch(() => { });
         }
         catch { }
     };
@@ -38,8 +54,8 @@ export function installShellDebugLog(): void {
             post(level, args);
         };
     }
-    window.addEventListener('error', (e) => post('uncaught', [e.message, e.filename, e.lineno]));
-    window.addEventListener('unhandledrejection', (e) => post('unhandledrejection', [String(e.reason)]));
+    window.addEventListener('error', (e) => post('uncaught', [e.message, e.filename, e.lineno, (e.error?.stack ?? '')]));
+    window.addEventListener('unhandledrejection', (e) => post('unhandledrejection', [e.reason]));
 }
 
 export function isNativeShell(): boolean {

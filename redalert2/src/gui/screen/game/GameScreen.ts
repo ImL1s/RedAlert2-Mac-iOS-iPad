@@ -60,6 +60,18 @@ import { OrderType } from '@/game/order/OrderType';
 import { RadialTileFinder } from '@/game/map/tileFinder/RadialTileFinder';
 import { Coords } from '@/game/Coords';
 import { inGameViewportActive } from '@/gui/inGameViewport';
+import { isNativeShell } from '@/shell/iosSeed';
+
+/** Compact on-screen crash detail for the native shell (no devtools on device). */
+function formatShellCrashDetail(error: any): string {
+    const msg = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+    const stackLines = (error?.stack ?? '')
+        .split('\n')
+        .slice(1, 5)
+        .map((l: string) => l.trim().replace(/https?:\/\/[^)]*\/(src|assets)\//, '').replace(/\?[^:) ]*/, ''))
+        .join('\n');
+    return `[${msg}]\n${stackLines}`.slice(0, 600);
+}
 import * as THREE from 'three';
 export class GameScreen extends RootScreen {
     private disposables = new CompositeDisposable();
@@ -1087,7 +1099,8 @@ export class GameScreen extends RootScreen {
             onError: this.config.devMode ? undefined : (error: any, isCritical?: boolean) => this.handleError(error, this.strings.get('TS:GameCrashed') +
                 (isCritical || game.gameOpts.mapOfficial
                     ? ''
-                    : '\n\n' + this.strings.get('TS:CustomMapCrash')), isCritical)
+                    : '\n\n' + this.strings.get('TS:CustomMapCrash')) +
+                (isNativeShell() ? '\n\n' + formatShellCrashDetail(error) : ''), isCritical)
         });
         this.uiAnimationLoop.stop();
         this.gameAnimationLoop.start();
