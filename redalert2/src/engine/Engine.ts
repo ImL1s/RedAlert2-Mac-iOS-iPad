@@ -380,7 +380,9 @@ export class Engine {
             throw new Error(`Unsupported engineType "${EngineType[currentEngine]}"`);
         }
         for (const setting of theaterSettingsForEngine) {
-            filesToHash.push(this.getFileNameVariant(setting.theaterIni));
+            // theaterSettings are already engine-specific (YR entries carry the
+            // "md" names) — re-applying the variant suffix produces *mdmd.ini.
+            filesToHash.push(setting.theaterIni);
         }
         const mpModes = this.getMpModes();
         for (const mode of mpModes.getAll()) {
@@ -514,8 +516,16 @@ export class Engine {
     static getTaunts(): LazyAsyncResourceCollection<WavFile> {
         return this.taunts;
     }
+    private static activeEngine: EngineType = EngineType.RedAlert2;
+    static setActiveEngine(engineType: EngineType): void {
+        if (engineType !== EngineType.RedAlert2 && engineType !== EngineType.YurisRevenge) {
+            throw new Error(`Unsupported engine type ${EngineType[engineType]}`);
+        }
+        this.activeEngine = engineType;
+        console.log(`[Engine] Active engine: ${EngineType[engineType]}`);
+    }
     static getActiveEngine(): EngineType {
-        return EngineType.RedAlert2;
+        return this.activeEngine;
     }
     static getLastTheaterType(): TheaterType | undefined {
         return this.activeTheater?.type;

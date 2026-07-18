@@ -67,6 +67,10 @@ export class Config {
     get serversUrl(): string {
         return this.generalData.getString("serversUrl", "servers.ini");
     }
+    /** "ra2" (default) or "yr" — which game the engine boots as. */
+    get engine(): string {
+        return this.generalData.getString("engine") || "ra2";
+    }
     get gameresBaseUrl(): string | undefined {
         const url = this.generalData.getString("gameresBaseUrl");
         return url === "" ? undefined : url;

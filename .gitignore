@@ -4,8 +4,9 @@ gameres-export/
 ios/Resources/GameRes/
 ios/Resources/WebDist/
 redalert2/public/local-pack/
-# Retail English string table, extracted from your language.mix at import time.
+# Retail English string tables, extracted from your language(md).mix at import time.
 redalert2/public/general.csf
+redalert2/public/generalmd.csf
 # Chinese original, kept locally as a reference backup only.
 redalert2/public/general.zh-CN.csf
 

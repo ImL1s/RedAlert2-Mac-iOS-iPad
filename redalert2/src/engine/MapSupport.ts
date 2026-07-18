@@ -42,9 +42,9 @@ export class MapSupport {
             if (!projectile || !warhead) {
                 return translator.get("TS:MapUnsupportedWeapon", weaponType);
             }
-            if (!rules.getIni().getSection(projectile)) {
-                return translator.get("TS:MapUnsupportedProjectile", projectile);
-            }
+            // Projectiles may legitimately lack an ini section — the original
+            // engine defaults all flags (YR's InvisibleLow relies on this), and
+            // Rules.getProjectile synthesizes an empty section to match.
             if (!rules.warheadRules.has(warhead.toLowerCase()) &&
                 !rules.getIni().getSection(warhead)) {
                 return translator.get("TS:MapUnsupportedWarhead", warhead);

@@ -287,15 +287,19 @@ export class PipOverlay {
                 this.healthBar = healthBarWrapper;
                 this.selectionBox = selectionBox;
                 rootObj.add(this.healthBar);
+                // Both anim names come from [AudioVisual] and may be absent in
+                // YR rules (the original binary hardcodes them) — never pass an
+                // empty name to the anim factory.
                 if (this.gameObject.art.isVoxel &&
                     (this.gameObject.rules.consideredAircraft || this.gameObject.isAircraft()) &&
-                    !this.gameObject.rules.missileSpawn) {
+                    !this.gameObject.rules.missileSpawn &&
+                    this.audioVisualRules.flyerHelper) {
                     const flyHelper = this.animFactory(this.audioVisualRules.flyerHelper);
                     this.flyHelper = flyHelper;
                     flyHelper.create3DObject();
                     rootObj.add(flyHelper.get3DObject());
                 }
-                if (this.gameObject.isUnit()) {
+                if (this.gameObject.isUnit() && this.audioVisualRules.behind) {
                     const behindAnim = this.animFactory(this.audioVisualRules.behind);
                     behindAnim.setRenderOrder(999995);
                     this.behindAnim = behindAnim;

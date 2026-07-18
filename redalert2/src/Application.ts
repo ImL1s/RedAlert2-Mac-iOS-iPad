@@ -20,6 +20,7 @@ import type { Viewport, ViewportRect } from './gui/Viewport';
 import { Gui } from './Gui';
 import { BasicErrorBoxApi } from './gui/component/BasicErrorBoxApi';
 import { Engine } from './engine/Engine';
+import { EngineType } from './engine/EngineType';
 import { ResourceLoader } from './engine/ResourceLoader';
 import { ImageContext } from './gui/component/ImageContext';
 import { ConsoleVars } from './ConsoleVars';
@@ -474,6 +475,7 @@ export class Application {
         }
         try {
             await this.loadConfig();
+            Engine.setActiveEngine(this.config.engine === "yr" ? EngineType.YurisRevenge : EngineType.RedAlert2);
             this.initializePreferredViewportSize();
             this.updateViewportSize();
         }

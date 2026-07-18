@@ -43,7 +43,8 @@ export class AudioVisualRules {
         this.ini = ini;
         this.ambientChangeRate = ini.getNumber("AmbientChangeRate");
         this.ambientChangeStep = ini.getNumber("AmbientChangeStep");
-        this.behind = ini.getString("Behind");
+        // YR's rulesmd.ini omits Behind (the original binary hardcodes it).
+        this.behind = ini.getString("Behind") || "BEHIND";
         this.bridgeExplosions = ini.getArray("BridgeExplosions");
         this.chronoBeamColor = ini.getNumberArray("ChronoBeamColor");
         this.chronoBlast = ini.getString("ChronoBlast");

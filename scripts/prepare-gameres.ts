@@ -14,12 +14,13 @@
  * clone plus a legally-owned copy of the game can produce a working build.
  */
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import { join } from "node:path";
 import { MixFile } from "../redalert2/src/data/MixFile";
 import { ShpFile } from "../redalert2/src/data/ShpFile";
 import { Palette } from "../redalert2/src/data/Palette";
+import { IniFile } from "../redalert2/src/data/IniFile";
 import { VirtualFile } from "../redalert2/src/data/vfs/VirtualFile";
 import { ImageUtils } from "../redalert2/src/engine/gfx/ImageUtils";
 import { mixDatabase } from "../redalert2/src/engine/mixDatabase";
@@ -143,10 +144,63 @@ for (let i = 0; i < bitmap.data.length; i++) {
 writeFileSync(join(OUT, "glsl.png"), encodePng(bitmap.width, bitmap.height, rgba));
 console.log(`   glsl.png (${bitmap.width}x${bitmap.height})`);
 
+// --- Yuri's Revenge (md) content ------------------------------------------
+console.log("== Copying YR mixes");
+for (const name of ["ra2md.mix", "langmd.mix", "multimd.mix", "expandmd01.mix"]) {
+    try {
+        copyFileSync(retailFile(name), join(OUT, name));
+        console.log(`   ${name}`);
+    } catch {
+        console.warn(`   (skip) ${name} not found — YR content unavailable`);
+    }
+}
+
+console.log("== Copying bonus map packs (*.mmx, *.yro)");
+for (const entry of readdirSync(RETAIL)) {
+    if (/\.(mmx|yro)$/i.test(entry)) {
+        copyFileSync(join(RETAIL, entry), join(OUT, entry.toLowerCase()));
+        console.log(`   ${entry.toLowerCase()}`);
+    }
+}
+
+console.log("== Extracting YR strings -> redalert2/public/generalmd.csf");
+try {
+    const langmdMix = openMix(retailFile("langmd.mix"));
+    extractTo(langmdMix, "ra2md.csf", join(ROOT, "redalert2", "public", "generalmd.csf"));
+} catch {
+    console.warn("   (skip) langmd.mix/ra2md.csf not found");
+}
+
+console.log("== Converting YR music (thememd.mix -> music/*.mp3)");
+try {
+    // Track list comes from thememd.ini (inside ra2md.mix -> localmd.mix):
+    // MIX archives store hashed names, so the ini is the only name source.
+    const ra2mdMix = openMix(retailFile("ra2md.mix"));
+    const localmd = new MixFile(ra2mdMix.openFile("localmd.mix").stream);
+    const themeIni = new IniFile(localmd.openFile("thememd.ini"));
+    const yrTracks = new Set<string>();
+    for (const section of themeIni.getOrderedSections()) {
+        const sound = section.getString("Sound");
+        if (sound) yrTracks.add(sound.toLowerCase() + ".wav");
+    }
+    const thememdMix = openMix(retailFile("thememd.mix"));
+    for (const wavName of yrTracks) {
+        if (!thememdMix.containsFile(wavName)) continue;
+        const mp3Name = wavName.replace(/\.wav$/i, ".mp3");
+        if (existsSync(join(OUT, "music", mp3Name))) continue;
+        const wavPath = join(TMP, wavName);
+        extractTo(thememdMix, wavName, wavPath);
+        execFileSync("ffmpeg", ["-y", "-loglevel", "error", "-i", wavPath, "-vn", "-ar", "22050", "-q:a", "5", join(OUT, "music", mp3Name)]);
+        console.log(`   ${mp3Name}`);
+    }
+} catch (e) {
+    console.warn("   (skip) YR music conversion failed:", (e as Error).message);
+}
+// --------------------------------------------------------------------------
+
 rmSync(TMP, { recursive: true, force: true });
 
 console.log("== Writing manifest.json");
-const { readdirSync, statSync } = await import("node:fs");
 const manifestFiles: { path: string; size: number }[] = [];
 const walk = (dir: string, prefix: string) => {
     for (const name of readdirSync(dir).sort()) {

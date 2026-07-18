@@ -1,6 +1,7 @@
 import { Color } from "@/util/Color";
 import { ObjectType } from "@/engine/type/ObjectType";
 import { CountryRules } from "@/game/rules/CountryRules";
+import { SideType } from "@/game/SideType";
 import { WeaponRules } from "@/game/rules/WeaponRules";
 import { AudioVisualRules } from "@/game/rules/AudioVisualRules";
 import { GeneralRules } from "@/game/rules/GeneralRules";
@@ -180,9 +181,13 @@ export class Rules {
     getProjectile(name: string): ProjectileRules {
         let rules = this.cachedProjectileRules.get(name);
         if (!rules) {
-            const section = this.ini.getSection(name);
+            let section = this.ini.getSection(name);
             if (!section) {
-                throw new Error(`Projectile ${name} is missing ini section`);
+                // The original engine tolerates weapons referencing projectiles
+                // with no ini section (e.g. YR's InvisibleLow) — all flags
+                // default. Synthesize an empty section to match.
+                this.logger?.debug(`Projectile "${name}" has no ini section; using defaults`);
+                section = this.ini.getOrCreateSection(name);
             }
             rules = new ProjectileRules(ObjectType.Projectile, section);
             this.cachedProjectileRules.set(name, rules);
@@ -223,7 +228,9 @@ export class Rules {
         return this.countryRules.get(name)!;
     }
     getMultiplayerCountries(): CountryRules[] {
-        return [...this.countryRules.values()].filter(country => country.multiplay);
+        // Yuri-side countries stay unselectable until the faction's core
+        // mechanics (slave miner economy etc.) are implemented (Phase B).
+        return [...this.countryRules.values()].filter(country => country.multiplay && country.side !== SideType.Yuri);
     }
     getMultiplayerColors(): Map<string, Color> {
         const colors = new Map<string, Color>();
