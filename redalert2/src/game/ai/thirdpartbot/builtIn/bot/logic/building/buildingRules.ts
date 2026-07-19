@@ -262,6 +262,6 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["YTNK", new BasicGroundUnit(6, 2, 0.5, 1.5)], // Gattling Tank (AA capable)
     ["MIND", new BasicGroundUnit(4, 1, 2, 0)], // Master Mind
     ["DISK", new BasicAirUnit(5, 1, 3, 1)], // Floating Disc
-    ["TELE", new BasicGroundUnit(0, 0)], // Magnetron (disabled until lift is implemented)
+    ["TELE", new BasicGroundUnit(3, 1, 2, 0)], // Magnetron (suspends vehicles)
     ["CAOS", new BasicGroundUnit(0, 0)], // Chaos Drone (disabled)
 ]);

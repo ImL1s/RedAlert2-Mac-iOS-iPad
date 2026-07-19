@@ -31,6 +31,7 @@ import { InvulnerableTrait } from "@/game/gameobject/trait/InvulnerableTrait";
 import { WarpedOutTrait } from "@/game/gameobject/trait/WarpedOutTrait";
 import { TntChargeTrait } from "@/game/gameobject/trait/TntChargeTrait";
 import { MindControllableTrait } from "@/game/gameobject/trait/MindControllableTrait";
+import { MagnetizedTrait } from "@/game/gameobject/trait/MagnetizedTrait";
 import { MindControllerTrait } from "@/game/gameobject/trait/MindControllerTrait";
 import { TemporalTrait } from "@/game/gameobject/trait/TemporalTrait";
 import { CloakableTrait } from "@/game/gameobject/trait/CloakableTrait";
@@ -179,6 +180,10 @@ export class ObjectFactory {
             if (!gameObject.rules.immuneToPsionics && !gameObject.isBuilding()) {
                 gameObject.mindControllableTrait = new MindControllableTrait(gameObject);
                 gameObject.traits.add(gameObject.mindControllableTrait);
+            }
+            if (gameObject.isVehicle()) {
+                gameObject.magnetizedTrait = new MagnetizedTrait();
+                gameObject.traits.add(gameObject.magnetizedTrait);
             }
             const weapons = [gameObject.primaryWeapon, gameObject.secondaryWeapon];
             if (weapons.some(weapon => weapon?.warhead.rules.mindControl)) {

@@ -681,6 +681,18 @@ export class Projectile extends GameObject {
                 this.fromObject.mindControllerTrait.control(targetObj, game);
             }
         }
+        if (warhead.rules.isLocomotor) {
+            // Magnetron beam: no detonation — the vehicle is held suspended
+            // for as long as the beam keeps refreshing it.
+            shouldDetonate = false;
+            if (targetObj?.isVehicle() &&
+                !targetObj.isDestroyed &&
+                targetObj.magnetizedTrait &&
+                warhead.canDamage(targetObj, detonationTile, detonationZone) &&
+                !targetObj.invulnerableTrait.isActive()) {
+                targetObj.magnetizedTrait.refresh(targetObj, game, this.fromObject);
+            }
+        }
         if (warhead.rules.temporal) {
             shouldDetonate = false;
             if (this.fromObject &&
