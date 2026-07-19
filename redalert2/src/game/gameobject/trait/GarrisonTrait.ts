@@ -4,6 +4,10 @@ import { NotifyDamage } from './interface/NotifyDamage';
 import { fnv32a } from '@/util/math';
 import { BuildingEvacuateEvent } from '@/game/event/BuildingEvacuateEvent';
 import { ScatterTask } from '@/game/gameobject/task/ScatterTask';
+import { ArmedTrait } from '@/game/gameobject/trait/ArmedTrait';
+import { AttackTrait } from '@/game/gameobject/trait/AttackTrait';
+import { Weapon } from '@/game/Weapon';
+import { WeaponType } from '@/game/WeaponType';
 export class GarrisonTrait {
     private building: Building;
     private evacThreshold: number;
@@ -19,6 +23,38 @@ export class GarrisonTrait {
     }
     canBeOccupied(): boolean {
         return this.building.healthTrait.health > 100 * this.evacThreshold;
+    }
+    /**
+     * Urban combat: an occupied building fires the occupants' OccupyWeapon
+     * (retail behavior — garrisonable civilian structures carry no weapons of
+     * their own). The weapon rate already scales with the occupant count.
+     */
+    updateOccupantWeapons(game: any): void {
+        const building: any = this.building;
+        const occupier = this.units.find((unit: any) => unit.rules.occupyWeapon);
+        if (occupier && !building.rules.occupantsPowerBonus) {
+            if (!building.armedTrait) {
+                building.armedTrait = new ArmedTrait(building, game.rules);
+                building.addTrait(building.armedTrait);
+            }
+            if (!building.attackTrait) {
+                building.attackTrait = new AttackTrait(game.map.tiles, game.map.tileOccupation);
+                building.addTrait(building.attackTrait);
+            }
+            const isElite = false;
+            const weaponName = (isElite && occupier.rules.eliteOccupyWeapon) || occupier.rules.occupyWeapon;
+            if (building.armedTrait.primaryWeapon?.rules.name !== weaponName) {
+                building.armedTrait.primaryWeapon = Weapon.factory(weaponName, WeaponType.Primary, building, game.rules);
+                building.armedTrait.secondaryWeapon = undefined;
+            }
+            building.attackTrait.setDisabled(false);
+        }
+        else if (building.armedTrait && !building.rules.primary) {
+            building.armedTrait.primaryWeapon = undefined;
+            building.armedTrait.secondaryWeapon = undefined;
+            building.attackTrait?.setDisabled(true);
+            building.unitOrderTrait?.getTasks?.().forEach((task: any) => task.cancel?.());
+        }
     }
     [NotifyDamage.onDamage](building: Building, context: GameContext): void {
         if (building.healthTrait.health <= 100 * this.evacThreshold) {
@@ -89,6 +125,9 @@ export class GarrisonTrait {
                 building.rules.occupantsPowerBonus &&
                 building.rules.power > 0) {
                 building.owner.powerTrait?.updateFrom(building, "update", context);
+            }
+            if (!building.isDestroyed) {
+                this.updateOccupantWeapons(context);
             }
             context.events.dispatch(new BuildingEvacuateEvent(building, oldOwner));
         }

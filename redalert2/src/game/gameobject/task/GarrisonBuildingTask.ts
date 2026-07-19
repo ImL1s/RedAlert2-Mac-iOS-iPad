@@ -31,5 +31,6 @@ export class GarrisonBuildingTask extends EnterBuildingTask {
         if (this.target.rules.occupantsPowerBonus && this.target.rules.power > 0) {
             this.target.owner.powerTrait?.updateFrom(this.target, "update", this.game);
         }
+        t.updateOccupantWeapons(this.game);
     }
 }

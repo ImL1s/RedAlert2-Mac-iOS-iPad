@@ -488,7 +488,9 @@ export class TechnoRules extends ObjectRules {
         this.speed = ObjectRules.iniSpeedToLeptonsPerTick(this.ini.getNumber("Speed"), speedMultiplier);
         this.movementZone = this.ini.getEnum("MovementZone", MovementZone, MovementZone.Normal);
         this.fearless = this.ini.getBool("Fearless");
-        this.deployer = this.ini.getBool("Deployer");
+        // YR introduced IsSimpleDeployer (Siege Chopper) alongside RA2's
+        // Deployer key; both mark a unit that toggles deployed state.
+        this.deployer = this.ini.getBool("Deployer") || this.ini.getBool("IsSimpleDeployer");
         this.deployFire = this.ini.getBool("DeployFire");
         this.deployFireWeapon = this.ini.getNumber("DeployFireWeapon", WeaponType.Secondary);
         this.undeployDelay = this.ini.getNumber("UndeployDelay");
