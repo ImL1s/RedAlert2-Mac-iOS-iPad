@@ -139,9 +139,15 @@ export class Production {
         return true;
     }
     meetsStolenTech(object: any): boolean {
-        return object.requiresStolenAlliedTech
-            ? this.stolenTech.has(SideType.GDI)
-            : !object.requiresStolenSovietTech || this.stolenTech.has(SideType.Nod);
+        // stolenTech stores raw AIBasePlanningSide indices from the infiltrated
+        // battle lab (AgentTrait): 0/1 coincide with SideType.GDI/Nod, but YR's
+        // third side (YATECH) is index 2 — NOT SideType.Yuri. Without the third
+        // check, YR's Psi Commando (PTROOP, RequiresStolenThirdTech=yes) leaks
+        // into every barracks at tech 9.
+        const THIRD_SIDE_TECH = 2;
+        return (!object.requiresStolenAlliedTech || this.stolenTech.has(SideType.GDI)) &&
+            (!object.requiresStolenSovietTech || this.stolenTech.has(SideType.Nod)) &&
+            (!object.requiresStolenThirdTech || this.stolenTech.has(THIRD_SIDE_TECH));
     }
     getFactoryTypeFor(object: any): FactoryType {
         if (object.type === ObjectType.Building)

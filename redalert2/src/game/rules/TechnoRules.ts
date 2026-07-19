@@ -37,6 +37,7 @@ export class TechnoRules extends ObjectRules {
     declare forbiddenHouses: string[];
     declare requiresStolenAlliedTech: boolean;
     declare requiresStolenSovietTech: boolean;
+    declare requiresStolenThirdTech: boolean;
     declare techLevel: number;
     declare cost: number;
     declare points: number;
@@ -296,6 +297,7 @@ export class TechnoRules extends ObjectRules {
         this.forbiddenHouses = this.ini.getArray("ForbiddenHouses");
         this.requiresStolenAlliedTech = this.ini.getBool("RequiresStolenAlliedTech");
         this.requiresStolenSovietTech = this.ini.getBool("RequiresStolenSovietTech");
+        this.requiresStolenThirdTech = this.ini.getBool("RequiresStolenThirdTech");
         this.techLevel = this.ini.getNumber("TechLevel", -1);
         this.cost = this.ini.getNumber("Cost");
         this.points = this.ini.getNumber("Points");
