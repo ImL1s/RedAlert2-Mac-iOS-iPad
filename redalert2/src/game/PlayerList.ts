@@ -31,7 +31,9 @@ export class PlayerList {
         return this.players.filter(p => !p.isNeutral);
     }
     getCivilian(): Player | undefined {
-        return this.players.find(p => p.country?.side === 'Civilian');
+        // side is a numeric SideType enum; the old string comparison never
+        // matched, so garrison hand-backs crashed on an undefined new owner.
+        return this.players.find(p => p.isNeutral);
     }
     getAll(): Player[] {
         return this.players;

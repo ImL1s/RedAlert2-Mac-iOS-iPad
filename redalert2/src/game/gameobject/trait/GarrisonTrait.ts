@@ -80,7 +80,10 @@ export class GarrisonTrait {
             // emptied; player-built garrisonables (Bio Reactor, bunkers)
             // stay owned.
             if (!units.length && !building.isDestroyed && building.rules.techLevel === -1) {
-                context.changeObjectOwner(building, context.getCivilianPlayer());
+                const civilian = context.getCivilianPlayer();
+                if (civilian) {
+                    context.changeObjectOwner(building, civilian);
+                }
             }
             if (!building.isDestroyed &&
                 building.rules.occupantsPowerBonus &&

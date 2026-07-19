@@ -129,14 +129,28 @@ export async function seedGameResFromShell(): Promise<void> {
     // itself verifies per-file sizes and only copies what is missing or stale,
     // so running it on every launch is cheap and self-healing.
     let overlay: ReturnType<typeof createSeedOverlay> | undefined;
+    let wroteFiles = 0;
     try {
-        await runSeed((text) => {
+        wroteFiles = await runSeed((text) => {
             overlay ??= createSeedOverlay();
             overlay.setText(text);
         });
     }
     finally {
         overlay?.remove();
+    }
+    // Copying ~750MB into OPFS leaves the content process at a memory
+    // high-water mark that the first game load then pushes over the jetsam
+    // limit (observed on iPad mini: first Start Game killed the web process,
+    // the shell rebooted, and only the second attempt survived). After a real
+    // first-time seed, reload once up front so the process starts the session
+    // clean instead of dying mid game-load.
+    if (wroteFiles > 0 && !sessionStorage.getItem('shellSeedReloaded')) {
+        sessionStorage.setItem('shellSeedReloaded', '1');
+        console.log(`[iosSeed] Fresh seed wrote ${wroteFiles} files; reloading once to reset memory high-water`);
+        window.location.reload();
+        // Halt boot; the reload takes over.
+        await new Promise(() => { });
     }
 }
 
@@ -154,7 +168,7 @@ function createSeedOverlay(): { setText: (text: string) => void; remove: () => v
     };
 }
 
-async function runSeed(onProgress: (text: string) => void): Promise<void> {
+async function runSeed(onProgress: (text: string) => void): Promise<number> {
     const manifestResponse = await fetch('/gameres/manifest.json');
     if (!manifestResponse.ok) {
         throw new Error(`Shell seed manifest missing (${manifestResponse.status})`);
@@ -162,6 +176,7 @@ async function runSeed(onProgress: (text: string) => void): Promise<void> {
     const manifest: SeedManifest = await manifestResponse.json();
     const totalBytes = manifest.files.reduce((sum, f) => sum + f.size, 0);
     let copiedBytes = 0;
+    let wroteFiles = 0;
     const root = await navigator.storage.getDirectory();
     for (const file of manifest.files) {
         const segments = file.path.split('/');
@@ -186,11 +201,13 @@ async function runSeed(onProgress: (text: string) => void): Promise<void> {
         const writable = await handle.createWritable();
         await response.body!.pipeTo(writable);
         copiedBytes += file.size;
+        wroteFiles++;
         onProgress(
             `Preparing game files... ${(copiedBytes / 1048576).toFixed(0)} / ${(totalBytes / 1048576).toFixed(0)} MB`,
         );
     }
     const config = String(GameResSource.Local);
     localStorage.setItem(StorageKey.GameRes, config);
-    console.log(`[iosSeed] Seeded ${manifest.files.length} files (${totalBytes} bytes) from shell bundle`);
+    console.log(`[iosSeed] Seeded ${manifest.files.length} files (${totalBytes} bytes, ${wroteFiles} written) from shell bundle`);
+    return wroteFiles;
 }

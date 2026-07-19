@@ -14,6 +14,7 @@ export class WarheadRules {
     public delayKillFrames!: number;
     public electricAssault!: boolean;
     public emEffect!: boolean;
+    public isLocomotor!: boolean;
     public infDeath!: InfDeathType;
     public ivanBomb!: boolean;
     public makesDisguise!: boolean;
@@ -52,6 +53,7 @@ export class WarheadRules {
         this.delayKillFrames = this.rules.getNumber("DelayKillFrames");
         this.electricAssault = this.rules.getBool("ElectricAssault");
         this.emEffect = this.rules.getBool("EMEffect");
+        this.isLocomotor = this.rules.getBool("IsLocomotor");
         this.infDeath = this.rules.getEnumNumeric("InfDeath", InfDeathType, InfDeathType.None);
         this.ivanBomb = this.rules.getBool("IvanBomb");
         this.makesDisguise = this.rules.getBool("MakesDisguise");
