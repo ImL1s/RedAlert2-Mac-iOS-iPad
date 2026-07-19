@@ -37,6 +37,8 @@ export class MapSpriteBatchLayer {
     private target?: THREE.Object3D;
     public meshRenderOrder: number = 0;
     public meshNoDepth: boolean = false;
+    private sortPending: boolean = false;
+    private lastSortTime: number = 0;
     constructor(label: string, batchedObjectRules: any[], spriteUseDepth: (obj: any) => number, theater: any, art: any, imageFinder: ImageFinder, camera: any, lighting: any, shpAggregator: ShpAggregator) {
         this.label = label;
         this.spriteUseDepth = spriteUseDepth;
@@ -83,7 +85,36 @@ export class MapSpriteBatchLayer {
             .filter(isNotNullOrUndefined);
         return this.shpAggregator.aggregate(shpFrameInfos, filename);
     }
-    update(deltaTime: number): void { }
+    update(deltaTime: number): void {
+        // Deterministic draw order for ground sprites (see resortBuilders).
+        // Debounced: initial map load streams objects in for a few frames, and
+        // ore add/remove churn shouldn't trigger a repack every tick.
+        if (this.sortPending && performance.now() - this.lastSortTime > 1000) {
+            this.sortPending = false;
+            this.lastSortTime = performance.now();
+            this.resortBuilders();
+        }
+    }
+    /**
+     * Repacks batch slots into isometric painter order: sprites lower on the
+     * screen draw over the ones above, matching the original engine's
+     * row-by-row cell rendering. These layers render with depth testing off,
+     * so slot order alone decides overlap winners — left to async art-load
+     * arrival order it differs per machine (iPad drew bright pavement over
+     * the dark paths that Mac rendered on top).
+     */
+    private resortBuilders(): void {
+        const byPainterOrder = (a: any, b: any) =>
+            (a.position.x + a.position.z) - (b.position.x + b.position.z) ||
+            (a.position.x - a.position.z) - (b.position.x - b.position.z) ||
+            a.frameNo - b.frameNo;
+        for (const builders of this.batchShpBuilders.values()) {
+            for (const builder of builders) {
+                builder.resort(byPainterOrder);
+            }
+        }
+        // Shadow builders are skipped: uniform translucent black, order-independent.
+    }
     updateLighting(): void {
         this.batchShpSpecsByObject.forEach((specs, obj) => {
             specs.main.lightMult?.copy(this.lighting.compute(obj.art.lightingType, obj.tile));
@@ -146,6 +177,7 @@ export class MapSpriteBatchLayer {
             shadowBuilder.add(shadowSpec as any);
         }
         this.batchShpSpecsByObject.set(obj, { main: mainSpec, shadow: shadowSpec });
+        this.sortPending = true;
     }
     private buildBatchShpSpec(obj: any, aggregatedData: any): BatchShpSpec {
         const foundation = obj.getFoundation();
@@ -206,6 +238,7 @@ export class MapSpriteBatchLayer {
                 }
             }
             this.batchShpSpecsByObject.delete(obj);
+            this.sortPending = true;
         }
     }
     hasObject(obj: any): boolean {

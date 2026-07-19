@@ -202,6 +202,38 @@ export class BatchShpBuilder {
     has(item: BatchItem): boolean {
         return this.specIndexes.has(item);
     }
+    /**
+     * Repacks all sprites into slots in `compare` order. Slot order IS draw
+     * order within the merged mesh, and for ground layers rendered with depth
+     * testing off it decides which of two overlapping sprites wins. Without an
+     * explicit order, slots follow async art-load arrival — stable on one
+     * machine, different on another.
+     */
+    resort(compare: (a: BatchItem, b: BatchItem) => number): void {
+        const items = [...this.specIndexes.keys()].sort(compare);
+        if (!this.mesh) {
+            this.specIndexes = new Map(items.map((item) => [item, undefined]));
+            return;
+        }
+        const geometry = this.mesh.geometry;
+        this.specIndexes.clear();
+        let spriteIndex = 0;
+        for (const item of items) {
+            this.specIndexes.set(item, spriteIndex);
+            this.setSpecGeometry(item, geometry, spriteIndex);
+            spriteIndex++;
+        }
+        // Rebuild the free-slot chain after the packed prefix (mirrors build()).
+        this.firstFreeSpriteIdx = spriteIndex < this.batchSize ? spriteIndex : -1;
+        const posArray = this.positionAttribute!.array as Float32Array;
+        const colorArray = this.colorMultAttribute!.array as Float32Array;
+        for (let i = spriteIndex; i < this.batchSize; i++) {
+            posArray[i * this.verticesPerSprite * 3] = i < this.batchSize - 1 ? i + 1 : -1;
+            this.setVisibilityAt(i, false, colorArray);
+        }
+        this.positionAttribute!.needsUpdate = true;
+        this.colorMultAttribute!.needsUpdate = true;
+    }
     remove(item: BatchItem): void {
         if (this.specIndexes.has(item)) {
             if (this.mesh) {

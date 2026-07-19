@@ -86,7 +86,10 @@ export class MapRenderable {
         this.overlayLayer.meshNoDepth = true;
         this.addObject(this.overlayLayer);
         this.smudgeLayer = new MapSpriteBatchLayer("map_smudge_layer", [...this.rules.smudgeRules.values()].filter((rule: any) => this.art.hasObject(rule.name, rule.type)), () => false as any, this.theater, this.art, this.imageFinder, this.camera, this.lighting, shpAggregator);
-        this.smudgeLayer.meshRenderOrder = -1;
+        // Above the overlay layer (-1): craters and scorch marks sit ON
+        // pavement. Distinct values keep the two layers' order deterministic
+        // instead of falling through to three's material-id tiebreak.
+        this.smudgeLayer.meshRenderOrder = -0.9;
         this.smudgeLayer.meshNoDepth = true;
         this.addObject(this.smudgeLayer);
         this.mapRadiation.onChange.subscribe(this.handleRadChange);
