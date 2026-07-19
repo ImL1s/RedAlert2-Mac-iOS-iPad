@@ -53,9 +53,15 @@ export class PowerTrait {
             }
         }
         else {
+            // Bio Reactor: each garrisoned infantry acts as a battery on top of
+            // the health-scaled base output.
+            const occupantBonus = (object.rules.occupantsPowerBonus &&
+                object.garrisonTrait?.units.length)
+                ? object.rules.occupantsPowerBonus * object.garrisonTrait.units.length
+                : 0;
             let powerDelta = 0;
             if (action === 'add') {
-                const powerValue = Math.ceil((power * object.healthTrait.health) / 100);
+                const powerValue = Math.ceil((power * object.healthTrait.health) / 100) + occupantBonus;
                 this.powerByObject.set(object, powerValue);
                 powerDelta = powerValue;
             }
@@ -65,7 +71,7 @@ export class PowerTrait {
                     throw new Error("Cannot update power before add.");
                 }
                 if (action === 'update') {
-                    const newPowerValue = Math.ceil((power * object.healthTrait.health) / 100);
+                    const newPowerValue = Math.ceil((power * object.healthTrait.health) / 100) + occupantBonus;
                     this.powerByObject.set(object, newPowerValue);
                     powerDelta = newPowerValue - oldPowerValue;
                 }

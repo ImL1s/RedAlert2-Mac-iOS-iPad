@@ -8,6 +8,7 @@ export class GarrisonBuildingTask extends EnterBuildingTask {
                 this.target.garrisonTrait.maxOccupants &&
             !(this.target.garrisonTrait.units.length &&
                 this.target.garrisonTrait.units[0].owner !== e.owner) &&
+            (this.target.owner.isNeutral || this.game.areFriendly(e, this.target)) &&
             !e.mindControllableTrait?.isActive());
     }
     onEnter(e: any): void {
@@ -19,11 +20,16 @@ export class GarrisonBuildingTask extends EnterBuildingTask {
                 .getControlGroupNumber(),
         });
         let t = this.target.garrisonTrait;
-        if (!t.units.length) {
+        // Occupying a neutral (civilian) building claims it; entering an
+        // own/allied garrisonable like the Bio Reactor must not.
+        if (!t.units.length && this.target.owner.isNeutral) {
             e.owner.buildingsCaptured++;
             this.game.changeObjectOwner(this.target, e.owner);
             this.game.events.dispatch(new BuildingGarrisonEvent(this.target));
         }
         t.units.push(e);
+        if (this.target.rules.occupantsPowerBonus && this.target.rules.power > 0) {
+            this.target.owner.powerTrait?.updateFrom(this.target, "update", this.game);
+        }
     }
 }

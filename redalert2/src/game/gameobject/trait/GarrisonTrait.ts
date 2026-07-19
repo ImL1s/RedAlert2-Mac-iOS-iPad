@@ -76,8 +76,16 @@ export class GarrisonTrait {
                 }
             }
             const oldOwner = building.owner;
-            if (!units.length && !building.isDestroyed) {
+            // Only captured civilian structures revert to neutral when
+            // emptied; player-built garrisonables (Bio Reactor, bunkers)
+            // stay owned.
+            if (!units.length && !building.isDestroyed && building.rules.techLevel === -1) {
                 context.changeObjectOwner(building, context.getCivilianPlayer());
+            }
+            if (!building.isDestroyed &&
+                building.rules.occupantsPowerBonus &&
+                building.rules.power > 0) {
+                building.owner.powerTrait?.updateFrom(building, "update", context);
             }
             context.events.dispatch(new BuildingEvacuateEvent(building, oldOwner));
         }

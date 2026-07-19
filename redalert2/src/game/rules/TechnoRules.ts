@@ -91,6 +91,7 @@ export class TechnoRules extends ObjectRules {
     declare tooBigToFitUnderBridge: boolean;
     declare canBeOccupied: boolean;
     declare maxNumberOccupants: number;
+    declare occupantsPowerBonus: number;
     declare leaveRubble: boolean;
     declare undeploysInto: string;
     declare deploysInto: string;
@@ -363,6 +364,17 @@ export class TechnoRules extends ObjectRules {
         this.tooBigToFitUnderBridge = this.ini.getBool("TooBigToFitUnderBridge", this.type === ObjectType.Building);
         this.canBeOccupied = this.ini.getBool("CanBeOccupied");
         this.maxNumberOccupants = this.ini.getNumber("MaxNumberOccupants");
+        // Yuri's Bio Reactor battery is hardcoded in the retail exe: rulesmd.ini
+        // gives YAPOWR no occupancy keys at all, yet it holds 5 infantry at
+        // +100 power each.
+        this.occupantsPowerBonus = 0;
+        if (this.name === "YAPOWR") {
+            this.canBeOccupied = true;
+            if (!this.maxNumberOccupants) {
+                this.maxNumberOccupants = 5;
+            }
+            this.occupantsPowerBonus = 100;
+        }
         this.leaveRubble = this.ini.getBool("LeaveRubble");
         this.undeploysInto = this.ini.getString("UndeploysInto");
         this.deploysInto = this.ini.getString("DeploysInto");

@@ -44,8 +44,15 @@ export class OccupyOrder extends Order {
                 this.sourceObject.isInfantry();
         }
         if (this.target.obj.garrisonTrait) {
+            // The Bio Reactor takes any friendly infantry as a battery, not
+            // just Occupier=yes urban fighters — but never slaves, whose
+            // miner owns them.
+            const battery = this.target.obj.rules.occupantsPowerBonus > 0 &&
+                !this.sourceObject.rules.slaved;
             return this.target.obj.garrisonTrait.canBeOccupied() &&
-                this.sourceObject.rules.occupier &&
+                (this.sourceObject.rules.occupier || battery) &&
+                (this.target.obj.owner.isNeutral ||
+                    this.game.areFriendly(this.sourceObject, this.target.obj)) &&
                 !(this.target.obj.garrisonTrait.units.length &&
                     this.target.obj.garrisonTrait.units[0].owner !== this.sourceObject.owner) &&
                 !this.sourceObject.mindControllableTrait?.isActive() &&
