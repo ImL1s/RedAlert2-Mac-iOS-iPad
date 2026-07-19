@@ -13,6 +13,8 @@ import { IronCurtainEffect } from "@/game/superweapon/IronCurtainEffect";
 import { ChronoSphereEffect } from "@/game/superweapon/ChronoSphereEffect";
 import { PsychicDominatorEffect } from "@/game/superweapon/PsychicDominatorEffect";
 import { GeneticConverterEffect } from "@/game/superweapon/GeneticConverterEffect";
+import { PsychicRevealEffect } from "@/game/superweapon/PsychicRevealEffect";
+import { ForceShieldEffect } from "@/game/superweapon/ForceShieldEffect";
 import { NotifySuperWeaponDeactivate } from "@/game/trait/interface/NotifySuperWeaponDeactivate";
 import { ObjectType } from "@/engine/type/ObjectType";
 export class SuperWeaponsTrait {
@@ -147,6 +149,12 @@ export class SuperWeaponsTrait {
                     break;
                 case SuperWeaponType.GeneticConverter:
                     t.push(new GeneticConverterEffect(o, i, s, e.range));
+                    break;
+                case SuperWeaponType.PsychicReveal:
+                    t.push(new PsychicRevealEffect(o, i, s));
+                    break;
+                case SuperWeaponType.ForceShield:
+                    t.push(new ForceShieldEffect(o, i, s));
                     break;
             }
             for (const d of t) {

@@ -7,5 +7,7 @@ export enum SuperWeaponType {
     ParaDrop = 5,
     AmerParaDrop = 6,
     PsychicDominator = 7,
-    GeneticConverter = 8
+    GeneticConverter = 8,
+    PsychicReveal = 9,
+    ForceShield = 10
 }

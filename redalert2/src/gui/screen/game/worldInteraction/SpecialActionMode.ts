@@ -10,7 +10,9 @@ const pointerTypeBySuperWeapon = new Map<SuperWeaponType, PointerType>()
     .set(SuperWeaponType.AmerParaDrop, PointerType.Para)
     .set(SuperWeaponType.ParaDrop, PointerType.Para)
     .set(SuperWeaponType.PsychicDominator, PointerType.Nuke)
-    .set(SuperWeaponType.GeneticConverter, PointerType.Nuke);
+    .set(SuperWeaponType.GeneticConverter, PointerType.Nuke)
+    .set(SuperWeaponType.PsychicReveal, PointerType.Storm)
+    .set(SuperWeaponType.ForceShield, PointerType.Iron);
 export class SpecialActionMode {
     private readonly _onExecute = new EventDispatcher<SpecialActionMode, {
         tile: any;
