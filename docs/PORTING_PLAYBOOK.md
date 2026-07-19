@@ -389,6 +389,55 @@ Allied flag was set). Stolen tech is recorded by `AIBasePlanningSide` index —
 Yuri's lab is index 2. RA2 classic was never affected: its PTROOP is gated
 behind stolen *Soviet* tech, which was already handled.
 
+### The power plant with invisible ini keys (Bio Reactor)
+
+**Symptom:** Yuri's Bio Reactor should hold 5 infantry at +100 power each,
+but `rulesmd.ini` gives `[YAPOWR]` *no occupancy keys at all* — no
+`CanBeOccupied`, no `MaxNumberOccupants`, no power-bonus key. Retail
+hardcodes the whole mechanic in the exe.
+
+**Approach:** mirror the exe with a by-name derivation in `TechnoRules`
+(`canBeOccupied=true`, 5 occupants, `occupantsPowerBonus=100`), then ride
+the existing civilian-garrison machinery — with three corrections it was
+never built for: entering an own/allied building must not run the
+capture path (`buildingsCaptured++` + owner change is gated to neutral
+targets now), emptying a *player-built* garrisonable must not hand it to
+the civilian player (gate: `techLevel === -1` means civilian), and enemy
+player-owned garrisonables must refuse entry entirely. The battery accepts
+any friendly infantry except slaves — `Occupier=yes` still gates urban
+garrisons only. Occupancy changes feed the player power ledger through the
+same health-scaled `updateFrom` used for damage.
+
+**Lab note:** the first verification run produced ghosts — the reactor
+handed to civilians on evacuate, its 650W still on my ledger, five
+Initiates vanished. All of it was a *stale vite module graph* (the served
+`GarrisonTrait` predated the edit), plus the enemy Yuri bot legitimately
+garrison-capturing the "civilian" reactor mid-test. Rule: after editing sim
+modules, reload with a cache-buster and verify the served module before
+trusting any observed behavior.
+
+### The bot that only built power plants (Yuri AI)
+
+**Symptom:** an AI rolled onto Yuri built 16 Bio Reactors and nothing else
+— no barracks, no factory, no army. 2400W of power for a base with zero
+drain.
+
+**Root cause:** the built-in bot's knowledge is a name-keyed map
+(`BUILDING_NAME_TO_RULES`) plus side-keyed lists, all Allied/Soviet-only.
+For Yuri, every lookup missed; the only actor left was the adapter's
+fail-safe, whose "extra power always allowed" exception and bare
+`available[0]` fallback both resolve to YAPOWR forever.
+
+**Fix:** add Yuri to the `Countries` enum, give the map the Yuri roster
+(YAREFN as a plain count-capped `BasicBuilding` — the harvesters-per-
+refinery ratio logic can never fit a building that ships its own 5
+harvesters), add initiate/lasher/disc attack compositions, a `YENGINEER`
+engineer-mission case, Yuri scouts, PCV expansion, and a
+`FAIL_SAFE_BUILD_ORDER_YURI`; restructure the fail-safe to walk its list
+before topping up power. Verified end-to-end: the Yuri bot opened
+YAPOWR→YAREFN→YABRCK→YAWEAP, ran 3 slave miners, and won its game with a
+14-unit combined-arms wave.
+
 ---
 
 ## Appendix: reproducing an asset build
