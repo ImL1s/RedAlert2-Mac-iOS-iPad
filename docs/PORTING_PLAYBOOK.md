@@ -459,6 +459,28 @@ order pipeline are the most expensive class of bug to find, because
 everything *looks* healthy — log or assert when an order resolves to
 nothing.
 
+### The loading screens that looked 16-bit (they weren't)
+
+**Symptom:** YR loading screens rendered as white blotches and false
+colors — plausibly "16-bit color not supported."
+
+**Root cause:** the ls800 screens are ordinary 8-bit paletted SHPs, but
+YR *repainted all of them* against per-country palettes (`mplsr.pal`
+Russia, `mplsu.pal` USA, … `mpyls.pal` Yuri, found by hash-probing the
+mix with candidate names) while the engine kept using RA2's shared
+`mpls.pal` for everything. Decoding the same pixels against the right
+palette produces retail-perfect screens — proven offline with a bun
+probe before touching engine code. The countries' palettes live in
+`loadmd.mix`; RA2's shared one hides in `cache.mix`.
+
+**Yuri's sidebar, demystified:** `sidec02md.mix` is not a full shell —
+it's a *delta* over `sidec02.mix`, and retail YR's entire Yuri UI
+amounts to the Soviet shell plus one file: `radary.shp`, the purple
+radar bezel (same 33-frame 168×110 layout as `radar.shp`). Layer the
+md side mix, swap one image name for Yuri players, done. When art
+seems missing, measure the mix before building a reskin pipeline: the
+answer was one file, not forty.
+
 ---
 
 ## Appendix: reproducing an asset build
