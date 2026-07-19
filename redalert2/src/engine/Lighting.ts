@@ -62,12 +62,18 @@ export class Lighting {
         if (type === LightingType.None) {
             return new THREE.Vector3(1, 1, 1);
         }
-        return this.computeTint(type)
-            .add(this.computeTileTint(tile, type, new THREE.Vector3()))
-            .multiplyScalar(this.mapLighting.ambient +
+        // Clamp both factors at zero (negative lamps like NEGLAMP/NEGRED can
+        // push the sums below it) — matches the original engine's behavior.
+        const tint = this.computeTint(type)
+            .add(this.computeTileTint(tile, type, new THREE.Vector3()));
+        tint.x = Math.max(0, tint.x);
+        tint.y = Math.max(0, tint.y);
+        tint.z = Math.max(0, tint.z);
+        const intensity = Math.max(0, this.mapLighting.ambient +
             this.mapLighting.ground +
             this.computeLevel(type, tile.z + height) +
             this.computeTileLightIntensity(tile));
+        return tint.multiplyScalar(intensity);
     }
     computeNoAmbient(type: LightingType, tile: any, height: number = 0): number {
         return this.computeLevel(type, tile.z + height) + this.computeTileLightIntensity(tile);

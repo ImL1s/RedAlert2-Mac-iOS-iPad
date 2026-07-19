@@ -320,8 +320,11 @@ export class Building {
                 else
                     console.warn(`<${this.objectRules.name}>: Alpha image "${e}" not found`);
             }
-            (this.objectRules.lightIntensity &&
-                (this.createLamp(t), this.objectRules.isLightpost)) ||
+            // Invisible light posts render nothing at all — their light is cast
+            // into the per-tile lighting (see WorldView lamp seeding), exactly
+            // like the original engine. The old additive glow-sprite approach
+            // (createLamp) washed out whole map areas to near-white.
+            this.objectRules.isLightpost ||
                 (this.createObjects(t),
                     this.updateIntersectTarget(),
                     this.pipOverlay &&
