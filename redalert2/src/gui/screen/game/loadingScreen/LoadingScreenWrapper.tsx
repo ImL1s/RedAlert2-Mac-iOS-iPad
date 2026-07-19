@@ -55,6 +55,21 @@ const countryBackgrounds = new Map<string, string>()
     .set("Alliance", "ls800korea.png")
     .set("YuriCountry", "ls800yuri.png")
     .set(OBS_COUNTRY_NAME, "ls800obs.png");
+// YR repainted every loading screen against a per-country palette (RA2
+// shares one mpls.pal). Rendering a YR screen with the RA2 palette
+// produces the blotchy white/blue garbage, so prefer these when present.
+const countryPalettes = new Map<string, string>()
+    .set("Americans", "mplsu.pal")
+    .set("French", "mplsf.pal")
+    .set("Germans", "mplsg.pal")
+    .set("British", "mplsuk.pal")
+    .set("Russians", "mplsr.pal")
+    .set("Confederation", "mplsc.pal")
+    .set("Africans", "mplsl.pal")
+    .set("Arabs", "mplsi.pal")
+    .set("Alliance", "mplsk.pal")
+    .set("YuriCountry", "mpyls.pal")
+    .set(OBS_COUNTRY_NAME, "mplsobs.pal");
 export class LoadingScreenWrapper extends UiComponent<LoadingScreenWrapperProps> {
     private declare countryName: string;
     private declare color: string;
@@ -75,8 +90,13 @@ export class LoadingScreenWrapper extends UiComponent<LoadingScreenWrapperProps>
         this.countryName = countryName;
         let color = player?.color ?? "#fff";
         if (player?.country) {
-            const loadColorKey = player.country.side === SideType.GDI ? "AlliedLoad" : "SovietLoad";
-            color = this.props.rules.colors.get(loadColorKey)?.asHexString() ?? "#fff";
+            const loadColorKey = player.country.side === SideType.GDI
+                ? "AlliedLoad"
+                : player.country.side === SideType.Yuri
+                    ? "YuriLoad"
+                    : "SovietLoad";
+            color = (this.props.rules.colors.get(loadColorKey) ??
+                this.props.rules.colors.get("SovietLoad"))?.asHexString() ?? "#fff";
         }
         this.color = color;
         const backgroundImage = countryBackgrounds.get(countryName);
@@ -86,7 +106,10 @@ export class LoadingScreenWrapper extends UiComponent<LoadingScreenWrapperProps>
             }
             else {
                 this.bgSpriteImg = backgroundImage.replace("png", "shp");
-                this.bgSpritePal = player?.country ? "mpls.pal" : "mplsobs.pal";
+                const perCountryPal = countryPalettes.get(countryName);
+                this.bgSpritePal = perCountryPal && Engine.vfs?.fileExists(perCountryPal)
+                    ? perCountryPal
+                    : (player?.country ? "mpls.pal" : "mplsobs.pal");
             }
         }
         else {

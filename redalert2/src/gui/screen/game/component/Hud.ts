@@ -39,6 +39,7 @@ interface SidebarModel {
 }
 export class Hud extends UiObject {
     private sideType: SideType;
+    private useYuriArt: boolean = false;
     private viewport: Viewport;
     private images: Map<string, any>;
     private palettes: Map<string, any>;
@@ -92,9 +93,10 @@ export class Hud extends UiObject {
     private menuContentContainer?: any;
     private menuContentContainerInner?: any;
     private menuContent?: any;
-    constructor(sideType: SideType, viewport: Viewport, images: Map<string, any>, palettes: Map<string, any>, cameoFilenames: string[], sidebarModel: SidebarModel, messageList: any, chatHistory: any, debugTextValue: any, debugTextEnabled: any, localPlayer: any, players: any, stalemateDetectTrait: any, countdownTimer: any, jsxRenderer: any, strings: any, commandBarButtonTypes: CommandBarButtonType[], persistentHoverTags: any) {
+    constructor(sideType: SideType, viewport: Viewport, images: Map<string, any>, palettes: Map<string, any>, cameoFilenames: string[], sidebarModel: SidebarModel, messageList: any, chatHistory: any, debugTextValue: any, debugTextEnabled: any, localPlayer: any, players: any, stalemateDetectTrait: any, countdownTimer: any, jsxRenderer: any, strings: any, commandBarButtonTypes: CommandBarButtonType[], persistentHoverTags: any, useYuriArt: boolean = false) {
         super(new THREE.Object3D(), new HtmlContainer());
         this.sideType = sideType;
+        this.useYuriArt = useYuriArt;
         this.viewport = viewport;
         this.images = images;
         this.palettes = palettes;
@@ -175,7 +177,11 @@ export class Hud extends UiObject {
             throw new Error('Missing palette "sidebar.pal"');
         const creditsImg = this.getImage("credits.shp");
         const topImg = this.getImage("top.shp");
-        const radarImg = this.getImage("radar.shp");
+        // Retail YR's entire Yuri sidebar is the Soviet shell plus one delta:
+        // the purple radar bezel shipped in sidec02md.mix.
+        const radarImg = this.useYuriArt && this.images.get("radary.shp")
+            ? this.getImage("radary.shp")
+            : this.getImage("radar.shp");
         const side1Img = this.getImage("side1.shp");
         const side2Img = this.getImage("side2.shp");
         const side2bImg = this.getImage("side2b.shp");

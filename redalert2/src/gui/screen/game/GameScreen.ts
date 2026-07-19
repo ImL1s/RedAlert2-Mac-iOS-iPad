@@ -637,7 +637,8 @@ export class GameScreen extends RootScreen {
         if (this.config.discordUrl) {
             commandBarButtonList.buttons.push(CommandBarButtonType.BugReport);
         }
-        this.hudFactory = new HudFactory(hudSide, this.viewport.value, sidebarModel, messageList, chatHistory, game.debugText, this.runtimeVars.debugText, localPlayer.isObserver ? undefined : localPlayer, game.getCombatants(), game.stalemateDetectTrait, game.countdownTimer, cameoFilenames, this.jsxRenderer, this.strings, commandBarButtonList.buttons, this.runtimeVars.persistentHoverTags);
+        const useYuriArt = !localPlayer.isObserver && localPlayer.country?.side === SideType.Yuri;
+        this.hudFactory = new HudFactory(hudSide, this.viewport.value, sidebarModel, messageList, chatHistory, game.debugText, this.runtimeVars.debugText, localPlayer.isObserver ? undefined : localPlayer, game.getCombatants(), game.stalemateDetectTrait, game.countdownTimer, cameoFilenames, this.jsxRenderer, this.strings, commandBarButtonList.buttons, this.runtimeVars.persistentHoverTags, useYuriArt);
         this.disposables.add(() => this.hudFactory = undefined);
         const hud = this.hudFactory.create();
         this.hud = hud;

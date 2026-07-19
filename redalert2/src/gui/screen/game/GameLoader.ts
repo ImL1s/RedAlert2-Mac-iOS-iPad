@@ -266,6 +266,8 @@ export class GameLoader {
             throw new Error('VFS is not initialized');
         Engine.vfs.removeArchive('sidec01.mix');
         Engine.vfs.removeArchive('sidec02.mix');
+        Engine.vfs.removeArchive('sidec01md.mix');
+        Engine.vfs.removeArchive('sidec02md.mix');
         Engine.vfs.removeArchive('sidec01cd.mix');
         Engine.vfs.removeArchive('sidec02cd.mix');
         Engine.unloadSideMixData();
@@ -279,6 +281,12 @@ export class GameLoader {
         }
         else {
             await Engine.vfs.addMixFile(hudSide === SideType.GDI ? 'sidec01.mix' : 'sidec02.mix');
+            // YR ships side art deltas (e.g. Yuri's radar bezel radary.shp in
+            // sidec02md.mix) layered over the base side mix.
+            const mdSideMix = hudSide === SideType.GDI ? 'sidec01md.mix' : 'sidec02md.mix';
+            if (Engine.vfs.fileExists(mdSideMix)) {
+                await Engine.vfs.addMixFile(mdSideMix);
+            }
         }
         await Engine.vfs.addMixFile(hudSide === SideType.GDI ? 'sidec01cd.mix' : 'sidec02cd.mix');
     }
