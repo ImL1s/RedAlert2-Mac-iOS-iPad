@@ -178,10 +178,17 @@ export class Hud extends UiObject {
         const creditsImg = this.getImage("credits.shp");
         const topImg = this.getImage("top.shp");
         // Retail YR's entire Yuri sidebar is the Soviet shell plus one delta:
-        // the purple radar bezel shipped in sidec02md.mix.
-        const radarImg = this.useYuriArt && this.images.get("radary.shp")
+        // the purple radar bezel shipped in sidec02md.mix, painted against its
+        // own palette (seeded under the radary.pal alias at load).
+        const useYuriRadar = this.useYuriArt &&
+            !!this.images.get("radary.shp") &&
+            !!this.palettes.get("radary.pal");
+        const radarImg = useYuriRadar
             ? this.getImage("radary.shp")
             : this.getImage("radar.shp");
+        const radarPalette = useYuriRadar
+            ? this.palettes.get("radary.pal")
+            : sidebarPalette;
         const side1Img = this.getImage("side1.shp");
         const side2Img = this.getImage("side2.shp");
         const side2bImg = this.getImage("side2b.shp");
@@ -279,11 +286,11 @@ export class Hud extends UiObject {
         }), jsx.jsx("sprite", {
             static: true,
             image: radarImg,
-            palette: sidebarPalette,
+            palette: radarPalette,
             y: topHeight,
         }), jsx.jsx(SidebarRadar, {
             image: radarImg,
-            palette: sidebarPalette,
+            palette: radarPalette,
             y: topHeight,
             sidebarModel: this.sidebarModel instanceof CombatantSidebarModel
                 ? this.sidebarModel

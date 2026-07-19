@@ -98,4 +98,19 @@ export class MixFile {
         }
         return VirtualFile.factory(this.stream, filename, this.dataStart + entry.offset, entry.length);
     }
+    /**
+     * Some retail entries only exist as name hashes (e.g. the Yuri sidebar
+     * palette in sidec02md.mix, whose original filename is unknown). This
+     * opens them under a caller-chosen alias.
+     */
+    public containsHash(hash: number): boolean {
+        return this.index.has(hash);
+    }
+    public openFileByHash(hash: number, alias: string): VirtualFile {
+        const entry = this.index.get(hash);
+        if (!entry) {
+            throw new Error(`Hash 0x${hash.toString(16)} not found`);
+        }
+        return VirtualFile.factory(this.stream, alias, this.dataStart + entry.offset, entry.length);
+    }
 }

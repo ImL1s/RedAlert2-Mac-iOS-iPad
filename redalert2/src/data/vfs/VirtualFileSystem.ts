@@ -53,6 +53,9 @@ export class VirtualFileSystem {
     hasArchive(name: string): boolean {
         return this.allArchives.has(name);
     }
+    getArchive(name: string): Archive | undefined {
+        return this.allArchives.get(name);
+    }
     removeArchive(name: string): void {
         const archive = this.allArchives.get(name);
         if (archive) {

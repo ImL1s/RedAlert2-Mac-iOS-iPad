@@ -1,4 +1,5 @@
 import { DataStream } from '@/data/DataStream';
+import { Palette } from '@/data/Palette';
 import { OperationCanceledError } from '@puzzl/core/lib/async/cancellation';
 import { ResourceType, theaterSpecificResources } from '@/engine/resourceConfigs';
 import { Engine } from '@/engine/Engine';
@@ -286,6 +287,15 @@ export class GameLoader {
             const mdSideMix = hudSide === SideType.GDI ? 'sidec01md.mix' : 'sidec02md.mix';
             if (Engine.vfs.fileExists(mdSideMix)) {
                 await Engine.vfs.addMixFile(mdSideMix);
+                // radary.shp is painted against its own purple palette, which
+                // sits in the same mix under a hash whose original filename is
+                // lost. Seed it under an alias so the HUD can pick it up.
+                const YURI_RADAR_PAL_HASH = 0x0b8d57c4;
+                const sideArchive: any = Engine.vfs.getArchive(mdSideMix);
+                if (sideArchive?.containsHash?.(YURI_RADAR_PAL_HASH)) {
+                    const palFile = sideArchive.openFileByHash(YURI_RADAR_PAL_HASH, 'radary.pal');
+                    Engine.getPalettes().set('radary.pal', new Palette(palFile.getBytes()));
+                }
             }
         }
         await Engine.vfs.addMixFile(hudSide === SideType.GDI ? 'sidec01cd.mix' : 'sidec02cd.mix');
