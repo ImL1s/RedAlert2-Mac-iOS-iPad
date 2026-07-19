@@ -89,6 +89,7 @@ export class TechnoRules extends ObjectRules {
     declare landTargeting: LandTargeting;
     declare navalTargeting: NavalTargeting;
     declare tooBigToFitUnderBridge: boolean;
+    declare bunker: boolean;
     declare canBeOccupied: boolean;
     declare maxNumberOccupants: number;
     declare occupantsPowerBonus: number;
@@ -362,6 +363,7 @@ export class TechnoRules extends ObjectRules {
         this.landTargeting = this.ini.getEnumNumeric("LandTargeting", LandTargeting, LandTargeting.LandOk);
         this.navalTargeting = this.ini.getEnumNumeric("NavalTargeting", NavalTargeting, NavalTargeting.UnderwaterNever);
         this.tooBigToFitUnderBridge = this.ini.getBool("TooBigToFitUnderBridge", this.type === ObjectType.Building);
+        this.bunker = this.ini.getBool("Bunker");
         this.canBeOccupied = this.ini.getBool("CanBeOccupied");
         this.maxNumberOccupants = this.ini.getNumber("MaxNumberOccupants");
         // Yuri's Bio Reactor battery is hardcoded in the retail exe: rulesmd.ini

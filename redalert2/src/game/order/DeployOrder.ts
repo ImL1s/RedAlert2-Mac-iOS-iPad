@@ -38,7 +38,8 @@ export class DeployOrder extends Order {
             (sourceObject.isBuilding() &&
                 sourceObject.rules.factory &&
                 !sourceObject.owner.production?.isPrimaryFactory(sourceObject)) ||
-            (sourceObject.isBuilding() && sourceObject.garrisonTrait?.units.length));
+            (sourceObject.isBuilding() && sourceObject.garrisonTrait?.units.length) ||
+            (sourceObject.isBuilding() && sourceObject.tankBunkerTrait?.isOccupied()));
     }
     isAllowed(): boolean {
         const sourceObject = this.sourceObject;
@@ -71,6 +72,9 @@ export class DeployOrder extends Order {
         if (sourceObject.isBuilding() && sourceObject.garrisonTrait?.units.length) {
             return true;
         }
+        if (sourceObject.isBuilding() && sourceObject.tankBunkerTrait?.isOccupied()) {
+            return true;
+        }
         throw new Error("Shouldn't reach this point. Missed a case.");
     }
     process(): Task[] | undefined {
@@ -96,6 +100,13 @@ export class DeployOrder extends Order {
             return [
                 new CallbackTask(() => {
                     sourceObject.garrisonTrait.evacuate(this.game, true);
+                }),
+            ];
+        }
+        if (sourceObject.isBuilding() && sourceObject.tankBunkerTrait?.isOccupied()) {
+            return [
+                new CallbackTask(() => {
+                    sourceObject.tankBunkerTrait.release(this.game);
                 }),
             ];
         }

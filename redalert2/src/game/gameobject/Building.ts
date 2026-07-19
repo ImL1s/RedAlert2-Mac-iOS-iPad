@@ -7,6 +7,7 @@ import { FactoryTrait } from "@/game/gameobject/trait/FactoryTrait";
 import { DockTrait } from "@/game/gameobject/trait/DockTrait";
 import { FreeUnitTrait } from "@/game/gameobject/trait/FreeUnitTrait";
 import { SlaveMinerTrait } from "@/game/gameobject/trait/SlaveMinerTrait";
+import { TankBunkerTrait } from "@/game/gameobject/trait/TankBunkerTrait";
 import { Techno } from "@/game/gameobject/Techno";
 import { CrewedTrait } from "@/game/gameobject/trait/CrewedTrait";
 import { CabHutTrait } from "@/game/gameobject/trait/CabHutTrait";
@@ -57,6 +58,7 @@ export class Building extends Techno {
     public wallTrait?: WallTrait;
     public gapGeneratorTrait?: GapGeneratorTrait;
     public psychicDetectorTrait?: PsychicDetectorTrait;
+    public tankBunkerTrait?: TankBunkerTrait;
     static factory(owner: any, rules: TechnoRules, gameRules: any, art: any, world: any, coords: any): Building {
         const building = new this(owner, rules, art);
         if (rules.canBeOccupied) {
@@ -128,6 +130,10 @@ export class Building extends Techno {
         }
         if (rules.enslaves) {
             building.traits.add(new SlaveMinerTrait());
+        }
+        if (rules.bunker) {
+            building.tankBunkerTrait = new TankBunkerTrait(building);
+            building.traits.add(building.tankBunkerTrait);
         }
         if (rules.produceCashStartup) {
             building.traits.add(new OilDerrickTrait());

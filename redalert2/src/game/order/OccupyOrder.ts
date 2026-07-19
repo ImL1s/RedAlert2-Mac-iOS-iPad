@@ -7,6 +7,7 @@ import { OrderFeedbackType } from "@/game/order/OrderFeedbackType";
 import { MovementZone } from "@/game/type/MovementZone";
 import { LocomotorType } from "@/game/type/LocomotorType";
 import { EnterRecyclerTask } from "@/game/gameobject/task/EnterRecyclerTask";
+import { EnterBunkerTask } from "@/game/gameobject/task/EnterBunkerTask";
 import { InfiltrateBuildingTask } from "@/game/gameobject/task/InfiltrateBuildingTask";
 import { EnterHospitalTask } from "@/game/gameobject/task/EnterHospitalTask";
 export class OccupyOrder extends Order {
@@ -34,6 +35,9 @@ export class OccupyOrder extends Order {
             return false;
         }
         if (this.isUnitRecycle(this.sourceObject, this.target.obj)) {
+            return true;
+        }
+        if (this.isBunkerEntry(this.sourceObject, this.target.obj)) {
             return true;
         }
         if (!this.sourceObject.isInfantry()) {
@@ -67,6 +71,16 @@ export class OccupyOrder extends Order {
             ((unit.isInfantry() && building.rules.cloning) || building.rules.grinding) &&
             !unit.rules.engineer;
     }
+    private isBunkerEntry(unit: any, building: any): boolean {
+        return building.rules.bunker &&
+            unit.isVehicle() &&
+            !unit.rules.naval &&
+            unit.rules.locomotor !== LocomotorType.Fly &&
+            unit.rules.locomotor !== LocomotorType.Hover &&
+            unit.rules.movementZone !== MovementZone.Fly &&
+            this.game.areFriendly(unit, building) &&
+            !unit.mindControllableTrait?.isActive();
+    }
     isAllowed(): boolean {
         const building = this.target.obj;
         const unit = this.sourceObject;
@@ -74,6 +88,9 @@ export class OccupyOrder extends Order {
             return unit.rules.movementZone !== MovementZone.Fly &&
                 unit.rules.locomotor !== LocomotorType.Chrono &&
                 this.game.sellTrait.computeRefundValue(unit) > 0;
+        }
+        if (this.isBunkerEntry(unit, building)) {
+            return !building.tankBunkerTrait?.isOccupied();
         }
         if (building.hospitalTrait) {
             return unit.healthTrait.health < 100 &&
@@ -89,6 +106,9 @@ export class OccupyOrder extends Order {
         const unit = this.sourceObject;
         if (this.isUnitRecycle(unit, building)) {
             return [new EnterRecyclerTask(this.game, building)];
+        }
+        if (this.isBunkerEntry(unit, building)) {
+            return [new EnterBunkerTask(this.game, building)];
         }
         if (building.hospitalTrait) {
             return [new EnterHospitalTask(this.game, building)];
