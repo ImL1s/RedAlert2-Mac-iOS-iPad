@@ -6,6 +6,7 @@ import { PoweredTrait } from "@/game/gameobject/trait/PoweredTrait";
 import { FactoryTrait } from "@/game/gameobject/trait/FactoryTrait";
 import { DockTrait } from "@/game/gameobject/trait/DockTrait";
 import { FreeUnitTrait } from "@/game/gameobject/trait/FreeUnitTrait";
+import { SlaveMinerTrait } from "@/game/gameobject/trait/SlaveMinerTrait";
 import { Techno } from "@/game/gameobject/Techno";
 import { CrewedTrait } from "@/game/gameobject/trait/CrewedTrait";
 import { CabHutTrait } from "@/game/gameobject/trait/CabHutTrait";
@@ -124,6 +125,9 @@ export class Building extends Techno {
         }
         if (rules.freeUnit) {
             building.traits.add(new FreeUnitTrait());
+        }
+        if (rules.enslaves) {
+            building.traits.add(new SlaveMinerTrait());
         }
         if (rules.produceCashStartup) {
             building.traits.add(new OilDerrickTrait());

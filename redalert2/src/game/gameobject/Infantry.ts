@@ -9,6 +9,8 @@ import { IdleActionTrait } from '@/game/gameobject/trait/IdleActionTrait';
 import { CrashableTrait } from '@/game/gameobject/trait/CrashableTrait';
 import { AgentTrait } from '@/game/gameobject/trait/AgentTrait';
 import { CrateBonuses } from '@/game/gameobject/unit/CrateBonuses';
+import { HarvesterTrait } from '@/game/gameobject/trait/HarvesterTrait';
+import { DockableTrait } from '@/game/gameobject/trait/DockableTrait';
 export class Infantry extends Techno {
     static SUB_CELLS = [2, 4, 3];
     direction: number;
@@ -23,6 +25,7 @@ export class Infantry extends Techno {
     crashableTrait?: CrashableTrait;
     suppressionTrait?: SuppressionTrait;
     agentTrait?: AgentTrait;
+    harvesterTrait?: HarvesterTrait;
     idleActionTrait: IdleActionTrait;
     get isMoving(): boolean {
         return this.moveTrait.isMoving();
@@ -42,6 +45,13 @@ export class Infantry extends Techno {
         if (infantry.rules.agent) {
             infantry.agentTrait = new AgentTrait();
             infantry.traits.add(infantry.agentTrait);
+        }
+        if (infantry.rules.harvester) {
+            // Yuri's slaves: infantry that gather ore like harvesters and
+            // deliver to the slave miner (a refinery-flagged building).
+            infantry.harvesterTrait = new HarvesterTrait(infantry.rules.storage);
+            infantry.traits.add(infantry.harvesterTrait);
+            infantry.traits.add(new DockableTrait());
         }
         infantry.idleActionTrait = new IdleActionTrait();
         infantry.traits.add(infantry.idleActionTrait);

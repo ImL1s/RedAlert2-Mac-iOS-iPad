@@ -12,6 +12,7 @@ import { CallbackTask } from "@/game/gameobject/task/system/CallbackTask";
 import { MoveTrait, MoveResult } from "@/game/gameobject/trait/MoveTrait";
 import { ZoneType } from "@/game/gameobject/unit/ZoneType";
 import { Vector2 } from "@/game/math/Vector2";
+import { SpeedType } from "@/game/type/SpeedType";
 export class ReturnOreTask extends Task {
     private game: any;
     private forceTarget: any;
@@ -31,7 +32,8 @@ export class ReturnOreTask extends Task {
         this.rangeHelper = new RangeHelper(game.map.tileOccupation);
     }
     onStart(unit: any): void {
-        if (!unit.isVehicle() || !unit.harvesterTrait) {
+        // Harvesters are vehicles OR Yuri's slaves (infantry).
+        if (!unit.harvesterTrait) {
             throw new Error(`Unit ${unit.name} is not a harvester.`);
         }
         unit.harvesterTrait.status = HarvesterStatus.MovingToRefinery;
@@ -130,7 +132,9 @@ export class ReturnOreTask extends Task {
             return this.onTick(unit);
         }
         if (harvesterTrait.status === HarvesterStatus.Docking) {
-            if (unit.direction !== 270) {
+            // The unload facing is a vehicle animation detail; infantry
+            // slaves have no turn rate and would wait forever.
+            if (!unit.isInfantry() && unit.direction !== 270) {
                 this.children.push(new TurnTask(270));
                 return false;
             }
@@ -225,7 +229,20 @@ export class ReturnOreTask extends Task {
             x: refinery.tile.rx + refinery.getFoundation().width - 1,
             y: refinery.tile.ry + Math.floor(refinery.getFoundation().height / 2),
         };
-        return this.game.map.tiles.getByMapCoords(dockingPos.x, dockingPos.y);
+        const canonicalTile = this.game.map.tiles.getByMapCoords(dockingPos.x, dockingPos.y);
+        // Classic refineries keep their docking pad passable, but Yuri's slave
+        // miner occupies its whole foundation — slaves deliver by walking up
+        // to the miner instead. Fall back to a deterministic passable tile
+        // adjacent to the foundation when the canonical pad is blocked.
+        if (refinery.rules.enslaves &&
+            (!canonicalTile ||
+                !this.game.map.terrain.getPassableSpeed(canonicalTile, SpeedType.Foot, true, false))) {
+            const adjacentTile = new RadialTileFinder(this.game.map.tiles, this.game.map.mapBounds, refinery.tile, refinery.getFoundation(), 1, 1, (tile: any) => this.game.map.terrain.getPassableSpeed(tile, SpeedType.Foot, true, false) > 0).getNextTile();
+            if (adjacentTile) {
+                return adjacentTile;
+            }
+        }
+        return canonicalTile;
     }
     private chronoMinerCanTeleport(unit: any, targetTile: any, refinery: any): boolean {
         const rangeHelper = this.rangeHelper;

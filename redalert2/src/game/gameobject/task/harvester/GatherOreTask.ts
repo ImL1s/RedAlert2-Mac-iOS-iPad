@@ -37,7 +37,8 @@ export class GatherOreTask extends Task {
         this.scanFarRadius = game.rules.ai.tiberiumFarScan;
     }
     onStart(unit: any): void {
-        if (!unit.isVehicle() || !unit.harvesterTrait) {
+        // Harvesters are vehicles OR Yuri's slaves (infantry).
+        if (!unit.harvesterTrait) {
             throw new Error(`Unit ${unit.name} is not a harvester.`);
         }
         unit.harvesterTrait.status = HarvesterStatus.MovingToOreSite;

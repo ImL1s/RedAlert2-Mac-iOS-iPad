@@ -1100,7 +1100,10 @@ export class Building {
     }
     setActiveAnimationVisible() {
         let e = this.animArtProps.getByType(A.AnimationType.ACTIVE);
-        this.objectRules.refinery && (e = [e[0]]),
+        // Yuri's slave miner is refinery-flagged but its art has no ACTIVE
+        // anim entries — [e[0]] would yield [undefined] and crash the
+        // destructure below.
+        this.objectRules.refinery && (e = e.length ? [e[0]] : []),
             e.forEach(({ showWhenUnpowered: e }, t) => {
                 try {
                     this.setAnimationVisibility(A.AnimationType.ACTIVE, this.powered || e, t);

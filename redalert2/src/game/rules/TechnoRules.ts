@@ -58,6 +58,10 @@ export class TechnoRules extends ObjectRules {
     declare bridgeRepairHut: boolean;
     declare constructionYard: boolean;
     declare refinery: boolean;
+    declare dockUnload: boolean;
+    declare enslaves?: string;
+    declare slavesNumber: number;
+    declare slaved: boolean;
     declare unitRepair: boolean;
     declare unitReload: boolean;
     declare unitSell: boolean;
@@ -596,6 +600,23 @@ export class TechnoRules extends ObjectRules {
         this.chronoOutSound = this.ini.getString("ChronoOutSound") || undefined;
         this.enterTransportSound = this.ini.getString("EnterTransportSound") || undefined;
         this.leaveTransportSound = this.ini.getString("LeaveTransportSound") || undefined;
+        // Yuri's slave miner family. The original engine hardcodes most of the
+        // behavior off these two keys, so derive the generic flags it never
+        // sets in the ini: a slave (Slaved=yes) IS a harvester, and a slave
+        // miner (Enslaves=...) IS a refinery with a dock.
+        this.enslaves = this.ini.getString("Enslaves") || undefined;
+        this.slavesNumber = this.ini.getNumber("SlavesNumber", 5);
+        this.slaved = this.ini.getBool("Slaved");
+        if (this.slaved) {
+            this.harvester = true;
+        }
+        if (this.enslaves) {
+            this.refinery = true;
+            this.dockUnload = true;
+            if (!this.numberOfDocks) {
+                this.numberOfDocks = 1;
+            }
+        }
     }
     private parseWeaponName(weaponName: string | undefined): string | undefined {
         return weaponName && weaponName.toLowerCase() !== "none" ? weaponName : undefined;
