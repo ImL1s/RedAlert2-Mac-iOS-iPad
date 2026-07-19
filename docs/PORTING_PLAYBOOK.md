@@ -281,6 +281,41 @@ read `clientWidth` instead, and the shroud-seam pan snapping must snap to
 whole *device* pixels, not logical ones — at 1.42×2 = 2.84 pixels per logical
 unit, logical snapping would have brought the scrolling seams back.
 
+### The map that was only too bright on the iPad
+
+**Symptom:** *"the brightness thing is really bad — some screens are absolutely
+unplayable."* Whole park and plaza areas nuked to near-white on the iPad;
+identical build renders perfectly in Chromium, in a Mac WKWebView harness,
+and in the iOS Simulator. Fogged areas looked normal — only currently-visible
+terrain blew out.
+
+**The hunt (worth recording):** every plausible theory died on real device
+data, collected over a debug REPL built into the shell (the app polls the dev
+Mac for JS snippets and posts results back — eval-over-LAN, because WKWebView
+has no console input). In order: shader precision (device reports fp32
+mediump, same as desktop), sRGB texture decode (mathematically exact on
+device), depth buffer size (24-bit everywhere), lamp lights (zero registered),
+stale lighting bakes (vertex buffers byte-identical across platforms). The
+breakthrough was same-tile pixel sampling: for identical world tiles, Mac and
+iPad showed *swapped* content — dark path pixels where the other platform had
+bright pavement, in interleaved patterns. Not a lighting bug at all: a **draw
+order** bug.
+
+**Root cause:** ground sprite layers (pavement overlays, smudges, terrain
+objects) render with depth testing off, so where two sprites overlap, whoever
+draws later wins. Slot order inside each merged sprite batch IS draw order —
+and slots were assigned in *async art-load arrival order*. Deterministic on
+any one machine, different between machines. The iPad's load timing put
+bright pavement sprites after the dark path sprites they should sit under.
+The earlier "white patches in Yuri assets" (blamed on GL corruption after a
+crash) were this same bug.
+
+**Fix:** repack batch slots into isometric painter order (south-most sprites
+draw last), debounced after load settles — matching the original engine's
+row-by-row cell rendering — plus explicit distinct renderOrder for the smudge
+layer instead of three.js's material-id tiebreak. Deterministic everywhere,
+and verified pixel-identical Mac vs iPad afterwards.
+
 ### The Psi Commando that defected to everyone
 
 **Symptom:** *"I'm not sure Psi Commando is a unit the Allies have until you
