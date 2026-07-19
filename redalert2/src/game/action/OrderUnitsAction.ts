@@ -170,7 +170,11 @@ export class OrderUnitsAction extends Action {
                     const units = orders.map((order: any) => order.sourceObject);
                     const positions = movePositionHelper.findPositions(units, this.target.tile, bridge, forceMove);
                     orders.forEach((order: any) => {
-                        const position = positions.get(order.sourceObject);
+                        // The formation helper only places units; a move order
+                        // on an undeployable building (slave miner, MCV'd
+                        // conyard) heads straight for the clicked tile.
+                        const position = positions.get(order.sourceObject) ??
+                            (order.sourceObject.isBuilding() ? this.target.tile : undefined);
                         if (!position) {
                             return;
                         }

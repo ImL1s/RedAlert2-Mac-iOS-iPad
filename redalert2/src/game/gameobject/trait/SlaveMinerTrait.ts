@@ -12,7 +12,8 @@ import { RadialBackFirstTileFinder } from '@/game/map/tileFinder/RadialBackFirst
  * spawned when the miner finishes, transferred with the miner on capture,
  * and freed to the attacker when the miner dies (retail behavior: killing a
  * slave miner liberates the surviving slaves to the liberator). On undeploy
- * the workforce is dismissed so a redeploy doesn't duplicate slaves.
+ * the workforce is orphaned in place and re-adopted by the next miner that
+ * deploys, so slaves survive a move without ever duplicating.
  */
 export class SlaveMinerTrait {
     private slaves = new Set<any>();
@@ -29,7 +30,19 @@ export class SlaveMinerTrait {
             return;
         }
         const slaveRules = context.rules.getObject(rules.enslaves, ObjectType.Infantry);
-        for (let i = 0; i < rules.slavesNumber; i++) {
+        // A redeployed miner first re-adopts its old workforce: slaves
+        // orphaned by an undeploy keep working for the next miner instead of
+        // being dismissed.
+        const orphans = context.getWorld().getAllObjects().filter((obj: any) => obj.isInfantry?.() &&
+            obj.rules.slaved &&
+            obj.owner === building.owner &&
+            !obj.isDestroyed &&
+            (!obj.slaveOwnerMiner || obj.slaveOwnerMiner.isDestroyed || !obj.slaveOwnerMiner.isSpawned));
+        for (const orphan of orphans.slice(0, rules.slavesNumber)) {
+            orphan.slaveOwnerMiner = building;
+            this.slaves.add(orphan);
+        }
+        for (let i = this.slaves.size; i < rules.slavesNumber; i++) {
             const slave = context.createUnitForPlayer(slaveRules, building.owner);
             let fallbackTile: any;
             const spawnTile = new RadialBackFirstTileFinder(context.map.tiles, context.map.mapBounds, building.tile, building.getFoundation(), 1, 2, (tile: any) => {
@@ -48,6 +61,7 @@ export class SlaveMinerTrait {
                 continue;
             }
             context.spawnObject(slave, spawnTile);
+            slave.slaveOwnerMiner = building;
             this.slaves.add(slave);
         }
     }
@@ -76,13 +90,12 @@ export class SlaveMinerTrait {
     }
 
     [NotifyUnspawn.onUnspawn](building: any, world: any): void {
-        // Undeploy back into the mobile miner: dismiss the workforce instead
-        // of letting a redeploy mint a fresh set alongside the old one.
-        if (!building.isDestroyed) {
-            for (const slave of this.aliveSlaves()) {
-                if (slave.owner === building.owner) {
-                    world.destroyObject(slave, undefined, true);
-                }
+        // Undeploy back into the mobile miner: the workforce is orphaned in
+        // place and re-adopted by the next miner that deploys (no duplicates:
+        // spawn tops up only past the adopted count).
+        for (const slave of this.aliveSlaves()) {
+            if (slave.slaveOwnerMiner === building) {
+                slave.slaveOwnerMiner = undefined;
             }
         }
         this.slaves.clear();
