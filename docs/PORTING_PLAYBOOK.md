@@ -260,6 +260,47 @@ dialog used to provide. Boot blocked on audio and never drew the menu.
 and retry on the first touch. Worst case audio starts a beat late; the game
 always boots.
 
+### Grainy textures on a Retina display
+
+**Symptom:** *"even the textures and stuff look grainy, I wonder if there's a
+better way to render them sharply at this resolution."*
+
+**Root cause:** the WebGL canvas rendered at the engine's *logical* resolution
+(~800×524 in-game), was CSS-scaled 1.42× to fill the iPad, and the display
+doubled that again (devicePixelRatio 2). Every rendered pixel smeared across
+~2.8 device pixels through bilinear filtering. The game was being played
+through a 2.8× blur-upscale.
+
+**Fix:** render at true native resolution. Three.js's `setPixelRatio` keeps
+the canvas CSS size logical while multiplying every viewport rect internally,
+so scene code doesn't change; the backing store becomes logical ×
+(displayScale × devicePixelRatio), one rendered pixel per device pixel
+(capped at 3× for GPU sanity). Two knock-ons matter: anything that read
+`canvas.width` for *logical* math (pointer mapping, edge-scroll zones) must
+read `clientWidth` instead, and the shroud-seam pan snapping must snap to
+whole *device* pixels, not logical ones — at 1.42×2 = 2.84 pixels per logical
+unit, logical snapping would have brought the scrolling seams back.
+
+### The Psi Commando that defected to everyone
+
+**Symptom:** *"I'm not sure Psi Commando is a unit the Allies have until you
+have some sort of building combinations."* (Correct instinct.)
+
+**Root cause:** YR's `[PTROOP]` ("Psi Commando") lists *every country* as
+Owner at TechLevel 9 with prerequisite just BARRACKS. What keeps it out of
+retail build menus is one key: `RequiresStolenThirdTech=yes` — send a spy
+into a *Yuri* Battle Lab to unlock it. The engine parsed the Allied and
+Soviet stolen-tech flags but not the third one, so in YR mode the Psi
+Commando quietly joined every faction's barracks. A one-key leak — the same
+class of bug as the `[AudioVisual]` crash: YR's rules lean on engine-side
+defaults and mechanics that a reconstruction must implement, not skip.
+
+**Fix:** parse `RequiresStolenThirdTech` and check all three stolen-tech
+flags independently (the old code also ignored the Soviet flag whenever the
+Allied flag was set). Stolen tech is recorded by `AIBasePlanningSide` index —
+Yuri's lab is index 2. RA2 classic was never affected: its PTROOP is gated
+behind stolen *Soviet* tech, which was already handled.
+
 ---
 
 ## Appendix: reproducing an asset build
