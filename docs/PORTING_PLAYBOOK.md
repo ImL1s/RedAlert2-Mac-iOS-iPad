@@ -316,6 +316,35 @@ row-by-row cell rendering — plus explicit distinct renderOrder for the smudge
 layer instead of three.js's material-id tiebreak. Deterministic everywhere,
 and verified pixel-identical Mac vs iPad afterwards.
 
+### The invisible lamps that painted the map white
+
+**Symptom:** after the draw-order fix, YR urban maps were *still* "way too
+bright" in patches — parks and plazas washed toward white — while RA2
+classic maps looked fine. The user's internet research pointed at retail
+"washed-out palette" fixes (cnc-ddraw), which don't apply mechanically to a
+WebGL engine but named the right symptom class: palette applied wrong.
+
+**Root cause:** YR maps are scattered with invisible lamp buildings
+(INGALITE, INYELWLAMP, NEGLAMP, ... all `Image=GALITE`,
+`InvisibleInGame=yes`) whose only job is to tint nearby cells. The engine
+approximated each with a giant additive glow sprite (blend: DstColor add)
+spanning `LightVisibility` — ~19 cells of radius — which blew whole areas
+to near-white. A scene-graph bisection (toggling `visible` per child while
+pixel-sampling one blown tile) found it in minutes after every lighting
+theory failed: hiding `building_INGALITE` snapped the pixel from pure white
+to perfectly tinted pavement.
+
+**Fix:** do what the original does. Draw nothing for `InvisibleInGame`
+buildings, delete the glow-sprite path, and cast lamp light into the
+per-tile lighting model at world build — linear falloff
+`(LightVisibility − 256·d) / LightVisibility` within `LightVisibility/256`
+cells, tint and intensity summed onto the map's `[Lighting]`, clamped at
+zero for the negative lamps. The formula comes from the community's
+retail-validated CNCMaps renderer, whose source doubles as the best
+documentation of the original lighting pipeline
+(`ambient − ground + level·z` scalar × per-channel tint, palettes 6-bit).
+The Alamo bakes 3,519 lit tiles; the white plaza became warm cream stone.
+
 ### The Psi Commando that defected to everyone
 
 **Symptom:** *"I'm not sure Psi Commando is a unit the Allies have until you
