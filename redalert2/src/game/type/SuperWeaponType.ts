@@ -9,5 +9,6 @@ export enum SuperWeaponType {
     PsychicDominator = 7,
     GeneticConverter = 8,
     PsychicReveal = 9,
-    ForceShield = 10
+    ForceShield = 10,
+    SpyPlane = 11
 }

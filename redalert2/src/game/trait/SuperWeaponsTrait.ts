@@ -15,6 +15,7 @@ import { PsychicDominatorEffect } from "@/game/superweapon/PsychicDominatorEffec
 import { GeneticConverterEffect } from "@/game/superweapon/GeneticConverterEffect";
 import { PsychicRevealEffect } from "@/game/superweapon/PsychicRevealEffect";
 import { ForceShieldEffect } from "@/game/superweapon/ForceShieldEffect";
+import { SpyPlaneEffect } from "@/game/superweapon/SpyPlaneEffect";
 import { NotifySuperWeaponDeactivate } from "@/game/trait/interface/NotifySuperWeaponDeactivate";
 import { ObjectType } from "@/engine/type/ObjectType";
 export class SuperWeaponsTrait {
@@ -155,6 +156,9 @@ export class SuperWeaponsTrait {
                     break;
                 case SuperWeaponType.ForceShield:
                     t.push(new ForceShieldEffect(o, i, s));
+                    break;
+                case SuperWeaponType.SpyPlane:
+                    t.push(new SpyPlaneEffect(o, i, s));
                     break;
             }
             for (const d of t) {
