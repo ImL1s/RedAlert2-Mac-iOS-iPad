@@ -500,13 +500,15 @@ export class Gui {
             debugRoot.audioSystem = this.audioSystem;
             debugRoot.mixer = this.mixer;
             if (Engine.vfs) {
-                const soundIni = Engine.getIni('sound.ini');
+                // YR ships its full sound index as soundmd.ini; loading the
+                // RA2 file leaves every YR-added entry "not defined".
+                const soundIni = Engine.getIni(Engine.getFileNameVariant('sound.ini'));
                 const soundSpecs = new SoundSpecs(soundIni);
                 const audioVisualRules = {
                     ini: {
                         getString: (key: string) => {
                             try {
-                                const rulesIni = Engine.getIni('rules.ini');
+                                const rulesIni = Engine.getIni(Engine.getFileNameVariant('rules.ini'));
                                 const audioVisualSection = rulesIni.getSection('AudioVisual');
                                 if (audioVisualSection) {
                                     return audioVisualSection.getString(key);

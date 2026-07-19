@@ -23,14 +23,23 @@ export class EvaSpecs {
             throw new Error("Missing eva.ini [DialogList] section");
         }
         const dialogNames = new Set(dialogListSection.entries.values());
-        const sidePrefix = this.sideType === SideType.GDI ? "Allied" : "Russian";
+        const sidePrefix = this.sideType === SideType.GDI
+            ? "Allied"
+            : this.sideType === SideType.Yuri
+                ? "Yuri"
+                : "Russian";
         for (let dialogName of dialogNames) {
             if (dialogName) {
                 let dialogSection = ini.getSection(dialogName);
                 if (dialogSection) {
+                    // Fall back across voice columns for entries a side does
+                    // not record (RA2's eva.ini has no Yuri column at all).
+                    const sound = dialogSection.getString(sidePrefix) ||
+                        dialogSection.getString("Russian") ||
+                        dialogSection.getString("Allied");
                     const spec: EvaSpec = {
                         text: dialogSection.getString("Text"),
-                        sound: dialogSection.getString(sidePrefix),
+                        sound,
                         priority: dialogSection.getEnum("Priority", EvaPriority, EvaPriority.Normal, true),
                         queue: dialogSection.getString("Type").trim().toLowerCase() === "queue",
                     };

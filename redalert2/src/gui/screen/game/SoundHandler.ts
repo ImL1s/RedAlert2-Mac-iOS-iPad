@@ -7,12 +7,15 @@ import { PowerupType } from '@/game/type/PowerupType';
 import { SuperWeaponType } from '@/game/type/SuperWeaponType';
 import { RadarEventType } from '@/game/rules/general/RadarRules';
 import { OrderFeedbackType } from '@/game/order/OrderFeedbackType';
+import { QueueType, QueueStatus } from '@/game/player/production/ProductionQueue';
 
 const detectedSuperWeaponEvaByType = new Map([
     [SuperWeaponType.MultiMissile, 'EVA_NuclearSiloDetected'],
     [SuperWeaponType.IronCurtain, 'EVA_IronCurtainDetected'],
     [SuperWeaponType.ChronoSphere, 'EVA_ChronosphereDetected'],
     [SuperWeaponType.LightningStorm, 'EVA_WeatherDeviceReady'],
+    [SuperWeaponType.PsychicDominator, 'EVA_PsychicDominatorDetected'],
+    [SuperWeaponType.GeneticConverter, 'EVA_GeneticMutatorDetected'],
 ]);
 
 const superWeaponReadyEvaByType = new Map([
@@ -22,6 +25,11 @@ const superWeaponReadyEvaByType = new Map([
     [SuperWeaponType.LightningStorm, 'EVA_LightningStormReady'],
     [SuperWeaponType.ParaDrop, 'EVA_ReinforcementsReady'],
     [SuperWeaponType.AmerParaDrop, 'EVA_ReinforcementsReady'],
+    [SuperWeaponType.PsychicDominator, 'EVA_PsychicDominatorReady'],
+    [SuperWeaponType.GeneticConverter, 'EVA_GeneticMutatorReady'],
+    [SuperWeaponType.ForceShield, 'EVA_ForceShieldReady'],
+    [SuperWeaponType.PsychicReveal, 'EVA_PsychicRevealReady'],
+    [SuperWeaponType.SpyPlane, 'EVA_SpyPlaneReady'],
 ]);
 
 const superWeaponActivateEvaByType = new Map([
@@ -29,6 +37,9 @@ const superWeaponActivateEvaByType = new Map([
     [SuperWeaponType.IronCurtain, 'EVA_IronCurtainActivated'],
     [SuperWeaponType.ChronoSphere, 'EVA_ChronosphereActivated'],
     [SuperWeaponType.LightningStorm, 'EVA_LightningStormCreated'],
+    [SuperWeaponType.PsychicDominator, 'EVA_PsychicDominatorActivated'],
+    [SuperWeaponType.GeneticConverter, 'EVA_GeneticMutatorActivated'],
+    [SuperWeaponType.ForceShield, 'EVA_ForceShieldActivated'],
 ]);
 
 const superWeaponActivateSoundByType = new Map([
@@ -58,6 +69,7 @@ const crateEvaByType = new Map([
 export class SoundHandler {
     private lastAvailableObjectNames: string[] = [];
     private lastQueueStatuses = new Map();
+    private lastAvailableNames?: Set<string>;
     private triggerSoundHandles = new Map();
     private disposables = new CompositeDisposable();
     private lastFeedbackTime?: number;
@@ -120,8 +132,51 @@ export class SoundHandler {
             case EventType.CratePickup:
                 this.handleCratePickupSound(event);
                 break;
+            case EventType.FactoryProduceUnit:
+                if (event.unit?.owner === this.player) {
+                    this.eva.play('EVA_UnitReady');
+                }
+                break;
+            case EventType.PowerLow:
+                if (event.target === this.player) {
+                    this.eva.play('EVA_LowPower');
+                }
+                break;
             default:
                 break;
+        }
+    }
+    /**
+     * Called by CombatantUi whenever the buildable set may have changed;
+     * announces newly unlocked tech.
+     */
+    handleAvailableObjectsUpdate(availableObjects: any[]): void {
+        const names = new Set<string>(availableObjects.map((obj: any) => obj.name));
+        const previous = this.lastAvailableNames;
+        this.lastAvailableNames = names;
+        if (!previous) {
+            return;
+        }
+        for (const name of names) {
+            if (!previous.has(name)) {
+                this.eva.play('EVA_NewConstructionOptions');
+                break;
+            }
+        }
+    }
+    /** Called by CombatantUi on production queue updates. */
+    handleProductionQueueUpdate(queue: any): void {
+        const previousStatus = this.lastQueueStatuses.get(queue.type);
+        this.lastQueueStatuses.set(queue.type, queue.status);
+        if (previousStatus === queue.status) {
+            return;
+        }
+        if (queue.status === QueueStatus.Ready &&
+            (queue.type === QueueType.Structures || queue.type === QueueType.Armory)) {
+            this.eva.play('EVA_ConstructionComplete');
+        }
+        else if (queue.status === QueueStatus.OnHold) {
+            this.eva.play('EVA_OnHold');
         }
     }
     private handleWeaponFireSound(event: any): void {

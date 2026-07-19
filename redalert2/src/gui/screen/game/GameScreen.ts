@@ -682,7 +682,10 @@ export class GameScreen extends RootScreen {
         this.localPrefs.removeItem(StorageKey.LastConnection);
         this.loadingScreenApi?.dispose();
         this.music?.play(MusicType.Normal);
-        const evaSpecs = new EvaSpecs(SideType.GDI).readIni(Engine.getIni('eva.ini'));
+        // YR's evamd.ini adds the Yuri voice column; the side picks whose EVA
+        // speaks (observers hear the Allied one).
+        const evaSide = localPlayer?.country?.side ?? SideType.GDI;
+        const evaSpecs = new EvaSpecs(evaSide).readIni(Engine.getIni(Engine.getFileNameVariant('eva.ini')));
         const eva = new Eva(evaSpecs, this.sound, this.renderer);
         eva.init();
         this.disposables.add(eva);
