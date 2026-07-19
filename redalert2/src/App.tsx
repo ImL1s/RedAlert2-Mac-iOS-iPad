@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Application, SplashScreenUpdateCallback } from './Application';
 import SplashScreenComponent from './gui/component/SplashScreen';
-import { installShellDebugLog, seedGameResFromShell } from './shell/iosSeed';
+import { installShellDebugLog, installShellRepl, seedGameResFromShell } from './shell/iosSeed';
 import type { ComponentProps } from 'react';
 function App() {
     const appRef = useRef<Application | null>(null);
@@ -33,6 +33,7 @@ function App() {
                 console.log('App.tsx: #ra2web-root found, calling app.main()');
                 try {
                     installShellDebugLog();
+                    installShellRepl();
                     await seedGameResFromShell();
                     await app.main();
                     console.log('App.tsx: app.main() completed.');

@@ -58,6 +58,55 @@ export function installShellDebugLog(): void {
     window.addEventListener('unhandledrejection', (e) => post('unhandledrejection', [e.reason]));
 }
 
+/**
+ * Debug aid (VITE_DEBUG_REPL=1 builds only): polls the dev receiver for JS
+ * snippets, evals them in page context and posts the result back. Gives a
+ * full REPL into WKWebView builds (simulator or device) where no console
+ * input channel exists. Inert unless the build flag is set AND a receiver
+ * is listening.
+ */
+export function installShellRepl(): void {
+    if (!isNativeShell() || !(import.meta as any).env?.VITE_DEBUG_REPL)
+        return;
+    const host = (import.meta as any).env?.VITE_DEBUG_LOG_HOST || '127.0.0.1';
+    console.log(`[repl] polling http://${host}:4100/cmd`);
+    let logged = false;
+    const poll = async () => {
+        try {
+            // POST, not GET: WKWebView on-device silently drops the GETs here
+            // while identical POSTs (the /log channel) go through.
+            const response = await fetch(`http://${host}:4100/cmd`, { method: 'POST', body: 'poll' });
+            if (!logged) {
+                logged = true;
+                console.log(`[repl] first poll status ${response.status}`);
+            }
+            if (response.status === 200) {
+                const { id, code } = await response.json();
+                let result: string;
+                try {
+                    // eslint-disable-next-line no-eval
+                    result = String(await (0, eval)(code));
+                }
+                catch (error: any) {
+                    result = `EVALERR: ${error?.message ?? error}\n${error?.stack ?? ''}`;
+                }
+                await fetch(`http://${host}:4100/result?id=${encodeURIComponent(id)}`, {
+                    method: 'POST',
+                    body: result.slice(0, 500000),
+                }).catch(() => { });
+            }
+        }
+        catch (error: any) {
+            if (!logged) {
+                logged = true;
+                console.warn(`[repl] poll failed: ${error?.message ?? error}`);
+            }
+        }
+        setTimeout(poll, 2000);
+    };
+    poll();
+}
+
 export function isNativeShell(): boolean {
     if (window.__RA2_SHELL__)
         return true;
