@@ -1,5 +1,6 @@
 import { pointEquals } from '../../util/geometry';
 import { RenderableContainer } from '../gfx/RenderableContainer';
+import { Renderer } from '../gfx/Renderer';
 import { CameraPan } from './CameraPan';
 import { CameraZoom } from './CameraZoom';
 import { LightingType } from '../type/LightingType';
@@ -137,11 +138,13 @@ export class WorldScene extends RenderableContainer {
         camera.translateZ(CAMERA_FAR * Coords.ISO_WORLD_SCALE);
         // Pan is expressed in zoom-1 screen pixels (matching the pan limits from
         // MapPanningHelper), so the translation must not depend on camera.zoom.
-        // Snap the applied pan to whole canvas pixels (pan * zoom = screen px):
-        // fractional camera positions (touch centroids, zoomed pan deltas, clamped
-        // limits) otherwise cause tile seams in the shroud while scrolling.
-        const panX = Math.round(pan.x * zoom) / zoom;
-        const panY = Math.round(pan.y * zoom) / zoom;
+        // Snap the applied pan to whole DEVICE pixels (pan * zoom = logical px,
+        // x pixelRatio = device px): fractional camera positions (touch
+        // centroids, zoomed pan deltas, clamped limits) otherwise cause tile
+        // seams in the shroud while scrolling.
+        const snap = zoom * Renderer.activePixelRatio;
+        const panX = Math.round(pan.x * snap) / snap;
+        const panY = Math.round(pan.y * snap) / snap;
         translation.set(elements[0], elements[1], elements[2]);
         translation.multiplyScalar((panX * (camera.right - camera.left)) / this.viewport.width);
         camera.position.add(translation);

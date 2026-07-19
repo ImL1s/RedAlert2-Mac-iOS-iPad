@@ -103,6 +103,7 @@ export class Gui {
         console.log('[Gui] Initializing renderer');
         const { width, height } = this.viewport.value;
         this.renderer = new Renderer(width, height);
+        this.renderer.setPixelRatio(((this.viewport.value as any).scale || 1) * (window.devicePixelRatio || 1));
         this.renderer.init(this.rootEl);
         this.uiAnimationLoop = new UiAnimationLoop(this.renderer);
         this.uiAnimationLoop.start();
@@ -117,6 +118,7 @@ export class Gui {
     }): void {
         console.log('[Gui] Viewport changed:', newViewport);
         this.renderer?.setSize(newViewport.width, newViewport.height);
+        this.renderer?.setPixelRatio(((newViewport as any).scale || 1) * (window.devicePixelRatio || 1));
         if (this.uiScene) {
             const newCamera = UiScene.createCamera(newViewport);
             this.uiScene.setCamera(newCamera);

@@ -24,8 +24,13 @@ export class CanvasMetrics {
             const rect = this.canvas.getBoundingClientRect();
             this.x = rect.left + this.window.scrollX;
             this.y = rect.top + this.window.scrollY;
-            this.width = this.canvas.width;
-            this.height = this.canvas.height;
+            // Logical (CSS) size, NOT canvas.width: with a renderer pixel ratio
+            // the backing store is logical x ratio, while scenes, cameras and
+            // pointer consumers all work in logical units. clientWidth is 0
+            // only before the canvas is attached — then the backing store still
+            // equals the logical size (ratio is applied after init).
+            this.width = this.canvas.clientWidth || this.canvas.width;
+            this.height = this.canvas.clientHeight || this.canvas.height;
             this.displayWidth = rect.width || this.canvas.clientWidth || this.width;
             this.displayHeight = rect.height || this.canvas.clientHeight || this.height;
         };

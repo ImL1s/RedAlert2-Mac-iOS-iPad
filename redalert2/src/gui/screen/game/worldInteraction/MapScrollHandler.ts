@@ -76,8 +76,10 @@ export class MapScrollHandler {
         x: number;
         y: number;
     }): void {
-        const height = this.canvas.height;
-        const width = this.canvas.width;
+        // Pointer coords are logical units — compare against the logical (CSS)
+        // size, not the backing store (which is logical x pixel ratio).
+        const height = this.canvas.clientHeight || this.canvas.height;
+        const width = this.canvas.clientWidth || this.canvas.width;
         let directionX = pointer.x < 3 ? -1 : pointer.x > width - 4 ? 1 : 0;
         let directionY = pointer.y < 3 ? -1 : pointer.y > height - 4 ? 1 : 0;
         if (directionX) {

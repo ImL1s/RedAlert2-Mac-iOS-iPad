@@ -6,6 +6,10 @@ export class Renderer {
     private width: number;
     private height: number;
     private renderer!: THREE.WebGLRenderer;
+    private pixelRatio: number = 1;
+    // The ratio currently applied to the main canvas, readable by code with no
+    // renderer reference (e.g. WorldScene's device-pixel pan snapping).
+    static activePixelRatio: number = 1;
     private scenes: Set<any> = new Set();
     private isContextLost: boolean = false;
     private stats?: Stats;
@@ -75,6 +79,7 @@ export class Renderer {
         catch (error) {
             throw new RendererError('Failed to initialize WebGL renderer');
         }
+        renderer.setPixelRatio(this.pixelRatio);
         renderer.setSize(this.width, this.height);
         renderer.autoClear = false;
         renderer.autoClearDepth = false;
@@ -89,6 +94,25 @@ export class Renderer {
         this.height = height;
         if (this.renderer) {
             this.renderer.setSize(width, height);
+        }
+    }
+    /**
+     * Renders the logical-resolution scene into a backing store of
+     * logical x ratio pixels (three keeps the canvas CSS size logical and
+     * multiplies viewports internally). With ratio = displayScale x
+     * devicePixelRatio, every rendered pixel maps 1:1 onto a device pixel —
+     * eliminating the blur from CSS-upscaling a small canvas.
+     */
+    setPixelRatio(ratio: number): void {
+        const clamped = Math.max(1, Math.min(3, ratio));
+        if (this.pixelRatio === clamped) {
+            return;
+        }
+        this.pixelRatio = clamped;
+        Renderer.activePixelRatio = clamped;
+        if (this.renderer) {
+            this.renderer.setPixelRatio(clamped);
+            this.renderer.setSize(this.width, this.height);
         }
     }
     addScene(scene: any): void {
