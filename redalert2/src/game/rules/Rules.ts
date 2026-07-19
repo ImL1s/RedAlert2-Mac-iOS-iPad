@@ -228,9 +228,10 @@ export class Rules {
         return this.countryRules.get(name)!;
     }
     getMultiplayerCountries(): CountryRules[] {
-        // Yuri-side countries stay unselectable until the faction's core
-        // mechanics (slave miner economy etc.) are implemented (Phase B).
-        return [...this.countryRules.values()].filter(country => country.multiplay && country.side !== SideType.Yuri);
+        // Phase B: Yuri is selectable. Known gap until the slave miner
+        // economy lands: no Yuri ore income yet — early game runs on
+        // starting credits.
+        return [...this.countryRules.values()].filter(country => country.multiplay);
     }
     getMultiplayerColors(): Map<string, Color> {
         const colors = new Map<string, Color>();

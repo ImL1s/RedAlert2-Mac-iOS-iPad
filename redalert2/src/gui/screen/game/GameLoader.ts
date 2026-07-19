@@ -76,7 +76,11 @@ export class GameLoader {
         if (playerName) {
             localPlayer = game.getPlayerByName(playerName);
             if (!localPlayer.isObserver) {
-                hudSide = localPlayer.country.side;
+                // The HUD art pipeline is binary (sidec01 = Allied shell,
+                // sidec02 = Soviet shell). Yuri wears the Soviet shell until
+                // the YR-style sidebar (all-new art names in sidec02md.mix)
+                // is implemented.
+                hudSide = localPlayer.country.side === SideType.GDI ? SideType.GDI : SideType.Nod;
             }
         }
         let cdnResources: any;

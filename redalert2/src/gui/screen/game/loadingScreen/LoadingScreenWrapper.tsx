@@ -53,6 +53,7 @@ const countryBackgrounds = new Map<string, string>()
     .set("Africans", "ls800libya.png")
     .set("Arabs", "ls800iraq.png")
     .set("Alliance", "ls800korea.png")
+    .set("YuriCountry", "ls800yuri.png")
     .set(OBS_COUNTRY_NAME, "ls800obs.png");
 export class LoadingScreenWrapper extends UiComponent<LoadingScreenWrapperProps> {
     private declare countryName: string;
@@ -127,7 +128,7 @@ export class LoadingScreenWrapper extends UiComponent<LoadingScreenWrapperProps>
             });
         }
         catch { }
-        return jsx("fragment", null, this.props.gameResConfig.isCdn()
+        return jsx("fragment", null, this.props.gameResConfig.isCdn() || !this.bgSpriteImg
             ? []
             : jsx("sprite", {
                 image: this.bgSpriteImg,
