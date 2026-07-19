@@ -182,7 +182,15 @@ export class ObjectFactory {
             }
             const weapons = [gameObject.primaryWeapon, gameObject.secondaryWeapon];
             if (weapons.some(weapon => weapon?.warhead.rules.mindControl)) {
-                gameObject.mindControllerTrait = new MindControllerTrait(gameObject);
+                // Retail keys multi-control on the weapon name: the Mastermind
+                // (MultipleMindControlTank) holds unlimited targets, the
+                // Psychic Tower (MultipleMindControlTower) three, Yuri clones
+                // (MindControl) one at a time.
+                const multi = weapons.some(weapon => weapon?.rules.name?.startsWith("MultipleMindControl"));
+                const capacity = multi
+                    ? (gameObject.isBuilding() ? 3 : Number.POSITIVE_INFINITY)
+                    : 1;
+                gameObject.mindControllerTrait = new MindControllerTrait(gameObject, capacity);
                 gameObject.traits.add(gameObject.mindControllerTrait);
             }
             if (gameObject.rules.spawns) {
