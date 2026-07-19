@@ -438,6 +438,27 @@ before topping up power. Verified end-to-end: the Yuri bot opened
 YAPOWR→YAREFN→YABRCK→YAWEAP, ran 3 slave miners, and won its game with a
 14-unit combined-arms wave.
 
+### The bunker that borrows a gun (and the miner that couldn't move)
+
+**Tank Bunker:** rather than teaching a limboed tank to fire, the bunker
+*becomes* the gun: on entry it gets an `ArmedTrait`/`AttackTrait` pair
+built from the occupant's weapon rules (`addTrait` keeps the tick cache
+in sync), and on exit the weapons are nulled and the attack trait
+disabled — trait *removal* doesn't exist in this engine, so disarm, don't
+detach. Enemies naturally target the bunker; the tank sits in limbo and
+walks out unharmed when the bunker deploys, sells, or dies.
+
+**The dropped move order:** ordering a slave miner building to move —
+the retail way to undeploy it — did nothing, in the real UI too. The
+action layer groups move orders through a formation helper that only
+assigns positions to *units*; building sources got no position and were
+silently skipped. One fallback line (buildings head for the clicked
+tile) fixed a bug that made Yuri's whole mobile-economy loop
+unreachable from the sidebar. The lesson repeats: silent drops in the
+order pipeline are the most expensive class of bug to find, because
+everything *looks* healthy — log or assert when an order resolves to
+nothing.
+
 ---
 
 ## Appendix: reproducing an asset build
