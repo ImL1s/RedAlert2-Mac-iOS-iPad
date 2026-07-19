@@ -38,6 +38,14 @@ export class ExitFactoryTask extends MoveTask {
         if (this.checkRampTiles) {
             for (const tile of this.checkRampTiles) {
                 for (const obj of this.game.map.tileOccupation.getGroundObjectsOnTile(tile)) {
+                    // The exiting unit itself spawns ON the ramp (factory
+                    // center) — counting it as a ramp blocker deadlocks the
+                    // exit forever: the unit waits for itself to move, the
+                    // factory stays Delivering and the whole vehicle queue
+                    // freezes at "Ready".
+                    if (obj === unit) {
+                        continue;
+                    }
                     if (obj.isUnit()) {
                         if (this.rampBlockersPushed)
                             return false;

@@ -167,66 +167,92 @@ export class Terrain {
         const hasEndNode = graph.hasNode(endNodeId);
         let finalEndTile = endTile;
         let finalEndOnBridge = endOnBridge;
-        const useIslandCheck = hasStartNode && !ignoredTiles.length;
-        let islandChecker: ((tile: Tile, onBridge: boolean) => boolean) | undefined;
-        if (useIslandCheck) {
-            const islandIdMap = this.getIslandIdMap(speedType, onBridge);
-            const startIslandId = islandIdMap.get(startTile, startOnBridge);
-            islandChecker = (tile, onBridge) => islandIdMap.get(tile, onBridge) === startIslandId;
-        }
-        else {
-            islandChecker = (tile, onBridge) => this.getPassableSpeed(tile, speedType, onBridge, onBridge, ignoredBlockers) > 0;
-        }
-        if (!hasEndNode || !islandChecker(endTile, endOnBridge)) {
-            const fallbackTile = bestEffort ?
-                new RadialTileFinder(this.tiles, this.mapBounds, endTile, { width: 1, height: 1 }, 1, useIslandCheck ? 15 : 5, (tile) => islandChecker!(tile, false) &&
-                    Math.abs(tile.z - endTile.z) < 2 &&
-                    !excludeTiles?.({ tile, onBridge: undefined })).getNextTile() : undefined;
-            if (fallbackTile) {
-                finalEndTile = fallbackTile;
-                finalEndOnBridge = false;
+        let addedEndNode = false;
+        // The graph mutations above (ignored blockers, forced start node) MUST
+        // be reverted even when the search throws — a skipped cleanup leaves
+        // force-passable ghost nodes inside buildings in the shared graph, and
+        // every later query near them misbehaves (units pathing through
+        // buildings, "toId is not defined" crashes on ordinary move orders,
+        // war factories wedged mid-delivery).
+        try {
+            const useIslandCheck = hasStartNode && !ignoredTiles.length;
+            let islandChecker: ((tile: Tile, onBridge: boolean) => boolean) | undefined;
+            let useIslandIds = false;
+            if (useIslandCheck) {
+                const islandIdMap = this.getIslandIdMap(speedType, onBridge);
+                const startIslandId = islandIdMap.get(startTile, startOnBridge);
+                // An undefined start island id (freshly re-added node) would make
+                // the checker accept every NODELESS tile (undefined === undefined)
+                // and hand the path finder a target that isn't in the graph.
+                useIslandIds = startIslandId !== undefined;
+                islandChecker = useIslandIds
+                    ? (tile, tileOnBridge) => islandIdMap.get(tile, tileOnBridge) === startIslandId
+                    : (tile, tileOnBridge) => this.getPassableSpeed(tile, speedType, onBridge, tileOnBridge, ignoredBlockers) > 0;
             }
             else {
-                if (useIslandCheck) {
-                    if (ignoredTiles.length) {
-                        this.updatePassability(ignoredTiles, speedType, onBridge, graph);
-                    }
-                    return [];
+                islandChecker = (tile, tileOnBridge) => this.getPassableSpeed(tile, speedType, onBridge, tileOnBridge, ignoredBlockers) > 0;
+            }
+            if (!hasEndNode || !islandChecker(endTile, endOnBridge)) {
+                const fallbackTile = bestEffort ?
+                    new RadialTileFinder(this.tiles, this.mapBounds, endTile, { width: 1, height: 1 }, 1, useIslandCheck ? 15 : 5, (tile) => islandChecker!(tile, false) &&
+                        Math.abs(tile.z - endTile.z) < 2 &&
+                        !excludeTiles?.({ tile, onBridge: undefined })).getNextTile() : undefined;
+                if (fallbackTile) {
+                    finalEndTile = fallbackTile;
+                    finalEndOnBridge = false;
                 }
-                graph.addNode(endNodeId, { tile: endTile, onBridge: undefined });
-                Math.min(maxExpandedNodes, 500);
+                else {
+                    if (useIslandCheck && useIslandIds) {
+                        return [];
+                    }
+                    // Graph.addNode on an EXISTING id replaces its data, wiping
+                    // the island id while keeping edges — only add when absent.
+                    if (!hasEndNode) {
+                        graph.addNode(endNodeId, { tile: endTile, onBridge: undefined });
+                        addedEndNode = true;
+                    }
+                    Math.min(maxExpandedNodes, 500);
+                }
+            }
+            const finalStartId = this.getNodeId(startTile, startOnBridge);
+            const finalEndId = this.getNodeId(finalEndTile, finalEndOnBridge);
+            if (!graph.hasNode(finalStartId) || !graph.hasNode(finalEndId)) {
+                // Unreachable/unknown endpoint: "no path", never a crash.
+                return [];
+            }
+            const pathFinder = new PathFinder(graph, {
+                bestEffort,
+                maxExpandedNodes,
+                excludedNodes: excludeTiles,
+                distance: calculateDistance,
+                heuristic: calculateHeuristic
+            });
+            let path = pathFinder
+                .find(finalStartId, finalEndId)
+                .map((node: GraphNode<NodeData>) => ({
+                tile: node.data.tile,
+                onBridge: node.data.onBridge
+            }));
+            if ((path.length < 2) ||
+                (excludeTiles && path.length &&
+                    ((!bestEffort && path[0].tile !== finalEndTile) ||
+                        path[path.length - 1].tile !== startTile))) {
+                path = [];
+            }
+            return path;
+        }
+        finally {
+            if (!hasStartNode) {
+                graph.removeNode(startNodeId);
+                this.updatePassability([startTile], speedType, onBridge, graph);
+            }
+            if (addedEndNode) {
+                graph.removeNode(endNodeId);
+            }
+            if (ignoredTiles.length) {
+                this.updatePassability(ignoredTiles, speedType, onBridge, graph);
             }
         }
-        const pathFinder = new PathFinder(graph, {
-            bestEffort,
-            maxExpandedNodes,
-            excludedNodes: excludeTiles,
-            distance: calculateDistance,
-            heuristic: calculateHeuristic
-        });
-        let path = pathFinder
-            .find(this.getNodeId(startTile, startOnBridge), this.getNodeId(finalEndTile, finalEndOnBridge))
-            .map((node: GraphNode<NodeData>) => ({
-            tile: node.data.tile,
-            onBridge: node.data.onBridge
-        }));
-        if ((path.length < 2) ||
-            (excludeTiles && path.length &&
-                ((!bestEffort && path[0].tile !== finalEndTile) ||
-                    path[path.length - 1].tile !== startTile))) {
-            path = [];
-        }
-        if (!hasStartNode) {
-            graph.removeNode(startNodeId);
-            this.updatePassability([startTile], speedType, onBridge, graph);
-        }
-        if (!hasEndNode) {
-            graph.removeNode(endNodeId);
-        }
-        if (ignoredTiles.length) {
-            this.updatePassability(ignoredTiles, speedType, onBridge, graph);
-        }
-        return path;
     }
     computeAllPassabilityGraphs(): void {
         Object.keys(SpeedType).forEach(key => {

@@ -72,7 +72,17 @@ export class SoloPlayTurnManager {
     private processActions(actions: any[]): void {
         actions.forEach((action) => {
             action.player = this.currentPlayer;
-            action.process();
+            // A malformed or failing action must not abort the whole turn:
+            // the throw would skip every remaining action AND this tick's
+            // game.update(), permanently jamming the input pipeline while the
+            // world keeps rendering — the game appears alive but ignores all
+            // commands. Drop the bad action and keep the turn going.
+            try {
+                action.process();
+            }
+            catch (error) {
+                console.error(`[TurnManager] Dropped action that failed to process: ${action?.constructor?.name}`, error);
+            }
             const printable = action.print?.();
             if (printable) {
                 this.actionLogger?.debug(`(${action.player.name})@${this.game.currentTick}: ${printable}`);

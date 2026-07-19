@@ -33,6 +33,8 @@ export class FactoryTrait {
     public status: FactoryStatus;
     public deliveringUnit?: any;
     public buildingProductionTicks?: number;
+    private deliveryRally?: { rallyPoint: any; rallyNode: any };
+    private exitRetryTicks: number = 0;
     constructor(type: FactoryType, isCloningVats: boolean = false) {
         this.type = type;
         this.isCloningVats = isCloningVats;
@@ -89,10 +91,27 @@ export class FactoryTrait {
                 this.buildingProductionTicks = undefined;
             }
             else if (!this.unitHasClearedFactory(this.deliveringUnit, building, world)) {
+                // Self-heal: if the exit task died (blocked exit, failed path)
+                // the unit would sit inside forever, wedging this factory in
+                // Delivering and freezing the whole vehicle queue at "Ready".
+                // Re-issue the exit move periodically until it rolls clear.
+                const unit = this.deliveringUnit;
+                if (!unit.unitOrderTrait.getCurrentTask() &&
+                    !unit.unitOrderTrait.hasTasks?.() &&
+                    this.unitIsInsideFactory(unit, building, world)) {
+                    if (this.exitRetryTicks-- <= 0) {
+                        this.exitRetryTicks = 90;
+                        const rally = this.deliveryRally;
+                        if (rally) {
+                            unit.unitOrderTrait.addTask(new ExitFactoryTask(world, building, rally.rallyPoint, rally.rallyNode));
+                        }
+                    }
+                }
                 return;
             }
             this.status = FactoryStatus.Idle;
             this.deliveringUnit = undefined;
+            this.deliveryRally = undefined;
             return;
         }
         if (building.owner.production && !building.warpedOutTrait.isActive()) {
@@ -211,6 +230,8 @@ export class FactoryTrait {
         }
         this.status = FactoryStatus.Delivering;
         this.deliveringUnit = unit;
+        this.deliveryRally = { rallyPoint, rallyNode };
+        this.exitRetryTicks = 90;
     }
     produceAircraftAt(building: any, item: any, world: any): boolean {
         const dockTrait = building.traits.find(DockTrait);
