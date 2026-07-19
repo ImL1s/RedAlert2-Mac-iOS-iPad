@@ -74,6 +74,11 @@ export class EngineerMission extends Mission {
                     composition["ADOG"] = Math.max(0, this.escortLevel - 1); // 0, 1, 2
                     composition["MTNK"] = Math.max(0, this.escortLevel - 2); // 0, 0, 1
                     break;
+                case SideType.Yuri:
+                    composition["YENGINEER"] = 1;
+                    composition["INIT"] = Math.max(0, this.escortLevel - 1); // 0, 1, 2
+                    composition["LTNK"] = Math.max(0, this.escortLevel - 2); // 0, 0, 1
+                    break;
             }
             const missingUnits = this.getMissingUnits(game, composition);
             if (missingUnits.length > 0) {
@@ -94,7 +99,7 @@ export class EngineerMission extends Mission {
                 return disbandMission(NO_PATH);
             }
             actionsApi.orderUnits([engineer.id], OrderType.Capture, this.captureTargetId);
-            const escortUnits = this.getUnitsOfTypes(game, "DOG", "HTNK", "ADOG", "MTNK");
+            const escortUnits = this.getUnitsOfTypes(game, "DOG", "HTNK", "ADOG", "MTNK", "INIT", "LTNK");
             if (escortUnits.length > 0) {
                 actionsApi.orderUnits(
                     escortUnits.map((u) => u.id),

@@ -25,6 +25,7 @@ export class BuiltInBotAdapter extends Bot {
 
     private static readonly FAIL_SAFE_BUILD_ORDER_ALLIED = ['GAPOWR', 'GAREFN', 'GAPILE', 'GAWEAP'];
     private static readonly FAIL_SAFE_BUILD_ORDER_SOVIET = ['NAPOWR', 'NAREFN', 'NAHAND', 'NAWEAP'];
+    private static readonly FAIL_SAFE_BUILD_ORDER_YURI = ['YAPOWR', 'YAREFN', 'YABRCK', 'YAWEAP'];
 
     constructor(name: string, country: string, profile: BotProfile = NORMAL_BOT_PROFILE) {
         super(name, country);
@@ -184,9 +185,11 @@ export class BuiltInBotAdapter extends Bot {
             return;
         }
 
-        const buildOrder = this.isAlliedCountry(this.country)
-            ? BuiltInBotAdapter.FAIL_SAFE_BUILD_ORDER_ALLIED
-            : BuiltInBotAdapter.FAIL_SAFE_BUILD_ORDER_SOVIET;
+        const buildOrder = this.country === 'YuriCountry'
+            ? BuiltInBotAdapter.FAIL_SAFE_BUILD_ORDER_YURI
+            : this.isAlliedCountry(this.country)
+                ? BuiltInBotAdapter.FAIL_SAFE_BUILD_ORDER_ALLIED
+                : BuiltInBotAdapter.FAIL_SAFE_BUILD_ORDER_SOVIET;
 
         const ownedBuildingNames = new Set(
             gameApi
@@ -195,20 +198,16 @@ export class BuiltInBotAdapter extends Bot {
                 .filter((n: any) => !!n),
         );
 
-        let nextBuild = buildOrder.find((name) => {
-            if (!available.includes(name)) {
-                return false;
-            }
-            // Allow building extra power if needed.
-            if (name.endsWith('POWR')) {
-                return true;
-            }
-            return !ownedBuildingNames.has(name);
-        });
+        let nextBuild = buildOrder.find((name) => available.includes(name) && !ownedBuildingNames.has(name));
+
+        // Whole list owned already — extra power is the only always-useful filler.
+        if (!nextBuild) {
+            nextBuild = buildOrder.find((name) => name.endsWith('POWR') && available.includes(name));
+        }
 
         // If predefined order is unavailable for this ruleset/mod, build any available structure to avoid deadlock.
         if (!nextBuild) {
-            nextBuild = available[0];
+            nextBuild = available.find((name: string) => !ownedBuildingNames.has(name)) ?? available[0];
         }
 
         if (nextBuild) {

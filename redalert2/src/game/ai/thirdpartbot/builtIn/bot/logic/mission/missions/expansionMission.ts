@@ -32,7 +32,7 @@ import { MissionContext, SupabotContext } from "../../common/context";
 
 const ORDER_COOLDOWN_TICKS = 60;
 
-const mcvTypes = ["AMCV", "SMCV"];
+const mcvTypes = ["AMCV", "SMCV", "PCV"];
 
 const CONYARD_SCAN_DISTANCE = 15; // distance to check a conyard is already in place
 const CONYARD_DEPLOY_SCAN_DISTANCE = 10; // distance to check for a deployable location

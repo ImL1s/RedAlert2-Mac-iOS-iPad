@@ -93,6 +93,36 @@ const DEFAULT_COMPOSITIONS: Compositions = {
         minimumUnits: 3,
         maximumUnits: 10,
     },
+    initiates: {
+        composition: {
+            INIT: 1,
+        },
+        minimumUnits: 3,
+        maximumUnits: 10,
+    },
+    yuriTanks: {
+        composition: {
+            LTNK: 5,
+            YTNK: 1,
+        },
+        minimumUnits: 2,
+        maximumUnits: 20,
+    },
+    heavyYuriTanks: {
+        composition: {
+            LTNK: 3,
+            MIND: 1,
+        },
+        minimumUnits: 2,
+        maximumUnits: 10,
+    },
+    discs: {
+        composition: {
+            DISK: 1,
+        },
+        minimumUnits: 1,
+        maximumUnits: 3,
+    },
 };
 
 export class DefaultStrategy implements Strategy {

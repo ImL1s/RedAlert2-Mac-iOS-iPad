@@ -240,4 +240,28 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["HTK", new BasicGroundUnit(5, 2, 0.33, 1.5)], // Flak Track
     ["ZEP", new BasicAirUnit(5, 1, 5, 1)], // Kirov
     ["V3", new ArtilleryUnit(9, 10, 0, 3)], // V3 Rocket Launcher
+
+    // Yuri
+    ["YAPOWR", new PowerPlant()], // Bio Reactor
+    // Slave Miner building: refinery + 5 self-managing slave harvesters in
+    // one. The harvesters-per-refinery ratio logic never fits it (always
+    // 5:1), so plain count-based priority instead.
+    ["YAREFN", new BasicBuilding(30, 3)],
+    ["YAWEAP", new BasicBuilding(15, 3)], // War Factory
+    ["YABRCK", new BasicBuilding(12, 1)], // Barracks
+    ["YAGRND", new BasicBuilding(1, 1, 10000)], // Grinder
+    ["YADEPT", new BasicBuilding(1, 1, 10000)], // Repair Depot
+
+    ["YAGGUN", new AntiGroundStaticDefence(2, 1, 10, 3)], // Gattling Cannon (also AA)
+    ["YAPSYT", new AntiGroundStaticDefence(2, 1, 10, 3)], // Psychic Tower
+
+    ["INIT", new BasicGroundUnit(2, 2, 0.2, 0)], // Initiate
+    ["YENGINEER", new BasicGroundUnit(1, 0, 0)], // Yuri Engineer
+    ["BRUTE", new BasicGroundUnit(3, 1, 1, 0)], // Brute
+    ["LTNK", new BasicGroundUnit(10, 3, 2, 0)], // Lasher Tank
+    ["YTNK", new BasicGroundUnit(6, 2, 0.5, 1.5)], // Gattling Tank (AA capable)
+    ["MIND", new BasicGroundUnit(4, 1, 2, 0)], // Master Mind
+    ["DISK", new BasicAirUnit(5, 1, 3, 1)], // Floating Disc
+    ["TELE", new BasicGroundUnit(0, 0)], // Magnetron (disabled until lift is implemented)
+    ["CAOS", new BasicGroundUnit(0, 0)], // Chaos Drone (disabled)
 ]);

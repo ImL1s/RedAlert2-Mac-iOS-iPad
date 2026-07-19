@@ -10,6 +10,7 @@ export enum Countries {
     IRAQ = "Arabs",
     CUBA = "Confederation",
     RUSSIA = "Russians",
+    YURI = "YuriCountry",
 }
 
 export type DebugLogger = (message: string, sayInGame?: boolean) => void;
