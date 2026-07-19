@@ -32,6 +32,15 @@ export class MindControllableTrait {
             this.controller = undefined;
         }
     }
+    /**
+     * Permanent psychic capture (Psychic Dominator): the unit keeps its new
+     * owner forever, so any prior control link is severed without restoring
+     * the previous owner.
+     */
+    makePermanent(): void {
+        this.controller = undefined;
+        this.prevOwner = undefined;
+    }
     [NotifyUnspawn.onUnspawn](gameObject: GameObject, world: World): void {
         if (this.controller) {
             this.controller.mindControllerTrait.cleanTarget(gameObject);

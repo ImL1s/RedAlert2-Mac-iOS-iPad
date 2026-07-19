@@ -7,6 +7,7 @@ export class SuperWeaponRules {
     public preClick: boolean;
     public preDependent?: SuperWeaponType;
     public postClick: boolean;
+    public range: number;
     public rechargeTime: number;
     public showTimer: boolean;
     public sidebarImage: string;
@@ -23,6 +24,7 @@ export class SuperWeaponRules {
         this.preClick = ini.getBool("PreClick");
         this.preDependent = ini.getEnum("PreDependent", SuperWeaponType, undefined);
         this.postClick = ini.getBool("PostClick");
+        this.range = ini.getNumber("Range");
         this.rechargeTime = ini.getNumber("RechargeTime", 5);
         this.showTimer = ini.getBool("ShowTimer");
         this.sidebarImage = ini.getString("SidebarImage").toLowerCase();

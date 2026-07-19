@@ -5,5 +5,7 @@ export enum SuperWeaponType {
     ChronoSphere = 3,
     ChronoWarp = 4,
     ParaDrop = 5,
-    AmerParaDrop = 6
+    AmerParaDrop = 6,
+    PsychicDominator = 7,
+    GeneticConverter = 8
 }

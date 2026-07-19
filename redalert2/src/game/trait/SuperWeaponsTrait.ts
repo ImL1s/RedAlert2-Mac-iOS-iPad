@@ -11,6 +11,8 @@ import { NukeEffect } from "@/game/superweapon/NukeEffect";
 import { LightningStormEffect } from "@/game/superweapon/LightningStormEffect";
 import { IronCurtainEffect } from "@/game/superweapon/IronCurtainEffect";
 import { ChronoSphereEffect } from "@/game/superweapon/ChronoSphereEffect";
+import { PsychicDominatorEffect } from "@/game/superweapon/PsychicDominatorEffect";
+import { GeneticConverterEffect } from "@/game/superweapon/GeneticConverterEffect";
 import { NotifySuperWeaponDeactivate } from "@/game/trait/interface/NotifySuperWeaponDeactivate";
 import { ObjectType } from "@/engine/type/ObjectType";
 export class SuperWeaponsTrait {
@@ -139,6 +141,12 @@ export class SuperWeaponsTrait {
                         throw new Error("Missing tile2 action param");
                     }
                     t.push(new ChronoSphereEffect(o, i, s, a));
+                    break;
+                case SuperWeaponType.PsychicDominator:
+                    t.push(new PsychicDominatorEffect(o, i, s));
+                    break;
+                case SuperWeaponType.GeneticConverter:
+                    t.push(new GeneticConverterEffect(o, i, s, e.range));
                     break;
             }
             for (const d of t) {

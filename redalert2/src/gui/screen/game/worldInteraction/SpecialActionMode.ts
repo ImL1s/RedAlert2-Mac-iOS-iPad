@@ -8,7 +8,9 @@ const pointerTypeBySuperWeapon = new Map<SuperWeaponType, PointerType>()
     .set(SuperWeaponType.ChronoSphere, PointerType.Chrono)
     .set(SuperWeaponType.ChronoWarp, PointerType.Chrono)
     .set(SuperWeaponType.AmerParaDrop, PointerType.Para)
-    .set(SuperWeaponType.ParaDrop, PointerType.Para);
+    .set(SuperWeaponType.ParaDrop, PointerType.Para)
+    .set(SuperWeaponType.PsychicDominator, PointerType.Nuke)
+    .set(SuperWeaponType.GeneticConverter, PointerType.Nuke);
 export class SpecialActionMode {
     private readonly _onExecute = new EventDispatcher<SpecialActionMode, {
         tile: any;
