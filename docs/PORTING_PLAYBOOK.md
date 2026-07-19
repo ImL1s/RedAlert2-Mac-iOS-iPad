@@ -345,6 +345,30 @@ documentation of the original lighting pipeline
 (`ambient − ground + level·z` scalar × per-channel tint, palettes 6-bit).
 The Alamo bakes 3,519 lit tiles; the white plaza became warm cream stone.
 
+### Teaching the engine to keep slaves (Yuri's economy)
+
+**The goal:** Yuri's faction runs on the Slave Miner — a refinery that is
+also a vehicle, staffed by five slaves who do the harvesting on foot. None
+of it worked: the original engine hardcodes the whole mechanic behind two
+ini keys (`Enslaves=SLAV`, `Slaved=yes`) that set no generic flags at all.
+
+**The approach:** derive what retail implies. A slave IS a harvester; an
+enslaving building IS a refinery with a dock. With those two derivations,
+90% of the feature fell out of existing machinery — harvester tasks,
+refinery docking, deploy logic (the mobile miner deploys exactly like an
+MCV), even the free-unit spawn pattern for the workforce.
+
+**The last 10% was infantry-shaped holes in vehicle-shaped code:** harvest
+tasks rejected non-vehicles outright; the miner occupies its entire
+foundation so the canonical docking tile (right edge, middle — a hardcoded
+convention from the classic refineries) is inside the building, leaving
+slaves eternally "looking for a refinery" three tiles from one; and the
+unload sequence waits for a 270° turn that infantry, having no turn rate,
+never complete. Each fix was a few lines once the wedge was visible in the
+harvester status enum. The Grinder, meanwhile, cost zero engine work — a
+fully implemented recycler task was already sitting in the codebase waiting
+for a faction that could use it.
+
 ### The Psi Commando that defected to everyone
 
 **Symptom:** *"I'm not sure Psi Commando is a unit the Allies have until you
