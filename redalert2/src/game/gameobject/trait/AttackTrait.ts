@@ -44,6 +44,11 @@ export class AttackTrait implements NotifyTick, NotifyDamage, NotifyTeleport {
     isIdle(): boolean {
         return this.attackState === AttackState.Idle;
     }
+    isFiring(): boolean {
+        return this.attackState === AttackState.Firing ||
+            this.attackState === AttackState.FireUp ||
+            this.attackState === AttackState.JustFired;
+    }
     isDisabled(): boolean {
         return this.disabled;
     }

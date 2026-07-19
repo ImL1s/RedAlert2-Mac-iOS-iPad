@@ -11,6 +11,7 @@ import { IniSection } from "@/data/IniSection";
 import { UnitOrderTrait } from "@/game/gameobject/trait/UnitOrderTrait";
 import { ObjectPosition } from "@/game/gameobject/ObjectPosition";
 import { AttackTrait } from "@/game/gameobject/trait/AttackTrait";
+import { GattlingTrait } from "@/game/gameobject/trait/GattlingTrait";
 import { Projectile } from "@/game/gameobject/Projectile";
 import { DeployerTrait } from "@/game/gameobject/trait/DeployerTrait";
 import { HealthTrait } from "@/game/gameobject/trait/HealthTrait";
@@ -136,6 +137,9 @@ export class ObjectFactory {
             if (gameObject.primaryWeapon || gameObject.secondaryWeapon) {
                 gameObject.attackTrait = new AttackTrait(this.tiles, this.tileOccupation);
                 gameObject.traits.add(gameObject.attackTrait);
+                if (gameObject.rules.isGattling) {
+                    gameObject.traits.add(new GattlingTrait());
+                }
             }
             if ((gameObject.isInfantry() || gameObject.isVehicle()) && gameObject.rules.deployer) {
                 gameObject.deployerTrait = new DeployerTrait(gameObject);

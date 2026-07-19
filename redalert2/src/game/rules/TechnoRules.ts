@@ -123,6 +123,10 @@ export class TechnoRules extends ObjectRules {
     declare elitePrimary?: string;
     declare eliteSecondary?: string;
     declare weaponCount: number;
+    declare isGattling: boolean;
+    declare weaponStages: number;
+    declare rateUp: number;
+    declare rateDown: number;
     declare deathWeapon?: string;
     declare deathWeaponDamageModifier: number;
     declare occupyWeapon?: string;
@@ -391,6 +395,13 @@ export class TechnoRules extends ObjectRules {
         this.elitePrimary = this.parseWeaponName(this.ini.getString("ElitePrimary"));
         this.eliteSecondary = this.parseWeaponName(this.ini.getString("EliteSecondary"));
         this.weaponCount = this.ini.getNumber("WeaponCount");
+        // Gattling weapons (YTNK, YAGGUN): WeaponCount slots split into
+        // WeaponStages pairs — odd slots anti-ground, even slots anti-air —
+        // escalating while firing (RateUp/frame) and spinning down when idle.
+        this.isGattling = this.ini.getBool("IsGattling");
+        this.weaponStages = this.ini.getNumber("WeaponStages", 1);
+        this.rateUp = this.ini.getNumber("RateUp", 1);
+        this.rateDown = this.ini.getNumber("RateDown", 50);
         this.deathWeapon = this.parseWeaponName(this.ini.getString("DeathWeapon"));
         this.deathWeaponDamageModifier = this.ini.getNumber("DeathWeaponDamageModifier", 1);
         this.occupyWeapon = this.parseWeaponName(this.ini.getString("OccupyWeapon"));

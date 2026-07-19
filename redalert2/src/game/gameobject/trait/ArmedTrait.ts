@@ -71,7 +71,12 @@ export class ArmedTrait implements NotifyTick, NotifyDestroy {
         this.specialWeaponIndex = 0;
         const isElite = gameObject.veteranLevel === VeteranLevel.Elite;
         if (gameObject.rules.weaponCount) {
-            this.selectSpecialWeapon(0, isElite);
+            if (gameObject.rules.isGattling) {
+                this.selectGattlingStage(0, isElite);
+            }
+            else {
+                this.selectSpecialWeapon(0, isElite);
+            }
             this.guardWeaponRangeOverride = this.primaryWeapon?.range;
         }
         else {
@@ -126,9 +131,37 @@ export class ArmedTrait implements NotifyTick, NotifyDestroy {
             ? Weapon.factory(gameObject.rules.deathWeapon || this.primaryWeapon.name, WeaponType.DeathWeapon, gameObject as any, this.rules as any)
             : undefined;
     }
+    /**
+     * Gattling stage n (0-based) arms the pair Weapon(2n+1)/Weapon(2n+2):
+     * anti-ground as primary, anti-air as secondary — so the regular
+     * air/ground weapon selection keeps working per stage.
+     */
+    public selectGattlingStage(stage: number, isElite: boolean = false): void {
+        const gameObject = this.gameObject;
+        const stages = Math.max(1, gameObject.rules.weaponStages);
+        const clampedStage = Math.max(0, Math.min(stages - 1, stage));
+        const groundIndex = 2 * clampedStage;
+        const airIndex = 2 * clampedStage + 1;
+        const groundName = (isElite && gameObject.rules.getEliteWeaponAtIndex(groundIndex)) ||
+            gameObject.rules.getWeaponAtIndex(groundIndex);
+        const airName = (isElite && gameObject.rules.getEliteWeaponAtIndex(airIndex)) ||
+            gameObject.rules.getWeaponAtIndex(airIndex);
+        this.primaryWeapon = groundName
+            ? Weapon.factory(groundName, WeaponType.Primary, gameObject as any, this.rules as any, gameObject.art.getSpecialWeaponFlh(groundIndex))
+            : undefined;
+        this.secondaryWeapon = airName
+            ? Weapon.factory(airName, WeaponType.Secondary, gameObject as any, this.rules as any, gameObject.art.getSpecialWeaponFlh(airIndex))
+            : undefined;
+        this.specialWeaponIndex = clampedStage;
+    }
     public toggleEliteWeapons(isElite: boolean): void {
         if (this.gameObject.rules.weaponCount) {
-            this.selectSpecialWeapon(this.specialWeaponIndex, isElite);
+            if (this.gameObject.rules.isGattling) {
+                this.selectGattlingStage(this.specialWeaponIndex, isElite);
+            }
+            else {
+                this.selectSpecialWeapon(this.specialWeaponIndex, isElite);
+            }
         }
         else {
             this.selectStandardWeapons(isElite);
