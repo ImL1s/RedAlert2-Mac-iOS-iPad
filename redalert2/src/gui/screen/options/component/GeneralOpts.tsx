@@ -188,6 +188,14 @@ export const GeneralOpts: React.FC<GeneralOptsProps> = ({ strings, options, full
           <Option value={String(ShadowQuality.Off)} label={strings.get("TS:GfxQualityOff")}/>
         </Select>
       </div>
+      <div className="item" data-r-tooltip="Caps how many frames are drawn per second. Lower values reduce battery drain and heat; the game speed is unaffected.">
+        <span className="label">Frame Limit</span>
+        <Select initialValue={String(options.graphics.frameLimit.value)} onSelect={(value) => (options.graphics.frameLimit.value = Number(value))}>
+          <Option value="60" label="60 FPS"/>
+          <Option value="30" label="30 FPS (Battery Saver)"/>
+          <Option value="0" label="Display Rate"/>
+        </Select>
+      </div>
     </fieldset>
     <fieldset>
       <legend>Performance</legend>

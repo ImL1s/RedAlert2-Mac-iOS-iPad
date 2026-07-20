@@ -20,6 +20,9 @@ export class UiScene extends UiObject {
     }): UiScene {
         let scene = new THREE.Scene();
         scene.matrixAutoUpdate = false;
+        // update() below refreshes world matrices; skip the renderer's
+        // implicit second full-graph traversal per render.
+        scene.matrixWorldAutoUpdate = false;
         const camera = UiScene.createCamera(viewport);
         const htmlContainer = new HtmlContainer();
         return new UiScene(scene, camera, viewport, htmlContainer);
@@ -71,8 +74,8 @@ export class UiScene extends UiObject {
     }
     update(deltaTime: number): void {
         super.update(deltaTime);
+        this.scene.updateMatrixWorld(false);
         if (this.meshBatchManager) {
-            this.scene.updateMatrixWorld(false);
             this.meshBatchManager.updateMeshes();
         }
     }

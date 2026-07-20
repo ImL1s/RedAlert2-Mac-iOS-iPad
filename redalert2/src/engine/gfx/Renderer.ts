@@ -72,7 +72,10 @@ export class Renderer {
         try {
             renderer = new THREE.WebGLRenderer({
                 canvas: canvas,
-                preserveDrawingBuffer: true,
+                // Nothing reads the framebuffer back; preserving it forces a
+                // costly per-frame copy on tile-based (iOS) GPUs.
+                preserveDrawingBuffer: false,
+                stencil: false,
                 powerPreference: 'high-performance',
             });
         }

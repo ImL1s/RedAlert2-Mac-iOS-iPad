@@ -82,7 +82,11 @@ export class RenderableManager {
     onObjectPositionChanged(gameObject: GameObject, tileChanged: boolean): void {
         const renderable = this.renderablesByGameObject.get(gameObject);
         renderable.setPosition(gameObject.position.worldPosition);
-        if (!(gameObject.isTechno() && gameObject.rules.isLightpost)) {
+        // Re-slotting the octree (remove+add) per sub-tile movement step is
+        // the dominant per-frame cost with many units moving. Culling only
+        // needs tile-level accuracy (the cull frustum carries multi-tile
+        // padding), so re-slot on tile crossings only.
+        if (tileChanged && !(gameObject.isTechno() && gameObject.rules.isLightpost)) {
             this.container.updateChild(renderable as any as import('./gfx/RenderableContainer').Renderable);
         }
     }

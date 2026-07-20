@@ -26,6 +26,10 @@ interface GameTurnManager {
 interface GameAnimationLoopOptions {
     skipFrames?: boolean;
     skipBudgetMillis?: number;
+    // Live-readable render fps cap (0 = display rate). Sim ticks always run.
+    frameLimit?: {
+        value: number;
+    };
     onError?(error: Error, isRenderError?: boolean): void;
 }
 export class GameAnimationLoop {
@@ -43,6 +47,7 @@ export class GameAnimationLoop {
     private lastGameTurnMillis: number | undefined;
     private rafId: number | undefined;
     private backgroundIntervalId: number | undefined;
+    private lastRenderTime: number = 0;
     constructor(localPlayer: LocalPlayer, renderer: Renderer, sound: Sound, gameTurnMgr: GameTurnManager, options: GameAnimationLoopOptions = {}) {
         this.localPlayer = localPlayer;
         this.renderer = renderer;
@@ -64,14 +69,9 @@ export class GameAnimationLoop {
     };
     private doFrame = (timestamp: number): void => {
         if (this.isStarted && !this.paused) {
-            recordGamePerformanceFrame(timestamp);
             let deltaFrames = this.updateDeltaGameFrames(timestamp);
             if (this.turnMgrIsWaiting || (!this.options.skipFrames && deltaFrames > 1)) {
                 deltaFrames = 1;
-            }
-            const stats = this.renderer.getStats();
-            if (stats) {
-                stats.begin();
             }
             if (this.options.skipBudgetMillis) {
                 let budget = this.options.skipBudgetMillis;
@@ -91,6 +91,24 @@ export class GameAnimationLoop {
                     this.turnMgrIsWaiting = !this.tickGame(timestamp);
                     deltaFrames--;
                 }
+            }
+            // Render fps cap: sim ticks above always run at full rate, but
+            // drawing is skipped until the next render slot. The half-frame
+            // slack keeps a 60 cap rendering every other frame on a 120 Hz
+            // display instead of every third.
+            const fpsCap = this.options.frameLimit?.value ?? 0;
+            if (fpsCap > 0) {
+                const renderInterval = 1000 / fpsCap;
+                if (timestamp - this.lastRenderTime < renderInterval - 4) {
+                    this.rafId = requestAnimationFrame(this.doFrame);
+                    return;
+                }
+                this.lastRenderTime = timestamp;
+            }
+            recordGamePerformanceFrame(timestamp);
+            const stats = this.renderer.getStats();
+            if (stats) {
+                stats.begin();
             }
             const turnMillis = this.gameTurnMgr.getTurnMillis();
             const interpolation = Math.max(0, (timestamp - (this.startTime! + this.lastGameFrame * turnMillis)) / turnMillis);

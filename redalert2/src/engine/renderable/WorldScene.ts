@@ -60,6 +60,10 @@ export class WorldScene extends RenderableContainer {
     }, enableLighting: BoxedVar<boolean>, shadowQuality: BoxedVar<ShadowQuality>): WorldScene {
         let scene = new THREE.Scene();
         scene.matrixAutoUpdate = false;
+        // update() calls scene.updateMatrixWorld() itself; without this flag
+        // WebGLRenderer.render() re-traverses the whole graph a second time
+        // every frame.
+        scene.matrixWorldAutoUpdate = false;
         const camera = WorldScene.createCamera(viewport);
         const cameraPan = new CameraPan(enableLighting);
         const cameraZoom = new CameraZoom(enableLighting);

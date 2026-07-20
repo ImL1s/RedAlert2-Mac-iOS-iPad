@@ -9,18 +9,25 @@ export class GraphicsOptions {
     resolution: BoxedVar<Resolution | undefined>;
     models: BoxedVar<ModelQuality>;
     shadows: BoxedVar<ShadowQuality>;
+    // Rendered frames per second cap (0 = display rate). Only limits drawing;
+    // the sim tick rate is unaffected.
+    frameLimit: BoxedVar<number>;
     constructor() {
         this.resolution = new BoxedVar<Resolution | undefined>(undefined);
         this.models = new BoxedVar(ModelQuality.High);
         this.shadows = new BoxedVar(ShadowQuality.High);
+        this.frameLimit = new BoxedVar(60);
     }
     unserialize(data: string): this {
-        const [t, i, r] = data.split(",");
+        const [t, i, r, f] = data.split(",");
         this.models.value = Number(t) as ModelQuality;
         this.shadows.value = Number(i) as ShadowQuality;
         if (r !== undefined) {
             const s = r.length ? r.split("x").map((e) => Number(e)) : undefined;
             this.resolution.value = s ? { width: s[0], height: s[1] } : undefined;
+        }
+        if (f !== undefined && f.length) {
+            this.frameLimit.value = Number(f);
         }
         return this;
     }
@@ -31,6 +38,7 @@ export class GraphicsOptions {
             this.resolution.value
                 ? [this.resolution.value.width, this.resolution.value.height].join("x")
                 : "",
+            this.frameLimit.value,
         ].join(",");
     }
     applyLowPreset(): void {

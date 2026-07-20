@@ -1100,6 +1100,7 @@ export class GameScreen extends RootScreen {
         this.gameAnimationLoop = new GameAnimationLoop(localPlayer, this.renderer, this.sound, this.gameTurnMgr, {
             skipFrames: true,
             skipBudgetMillis: 8,
+            frameLimit: this.generalOptions.graphics.frameLimit,
             onError: this.config.devMode ? undefined : (error: any, isCritical?: boolean) => this.handleError(error, this.strings.get('TS:GameCrashed') +
                 (isCritical || game.gameOpts.mapOfficial
                     ? ''

@@ -1,11 +1,16 @@
 import { Renderer } from './gfx/Renderer';
 import { recordUiPerformanceFrame } from '@/performance/PerformanceRuntime';
+// Menus and static screens gain nothing from display-rate rendering; capping
+// them keeps idle power (and device heat) down.
+const MENU_FPS = 30;
+const MENU_FRAME_SLACK_MS = 4;
 export class UiAnimationLoop {
     private renderer: Renderer;
     private isStarted: boolean = false;
     private paused: boolean = false;
     private rafId?: number;
     private backgroundIntervalId?: number;
+    private lastRenderTime: number = 0;
     constructor(renderer: Renderer) {
         this.renderer = renderer;
     }
@@ -16,6 +21,11 @@ export class UiAnimationLoop {
     };
     private doFrame = (timestamp: number): void => {
         if (this.isStarted && !this.paused) {
+            if (timestamp - this.lastRenderTime < 1000 / MENU_FPS - MENU_FRAME_SLACK_MS) {
+                this.rafId = requestAnimationFrame(this.doFrame);
+                return;
+            }
+            this.lastRenderTime = timestamp;
             recordUiPerformanceFrame(timestamp);
             const stats = this.renderer.getStats();
             if (stats) {

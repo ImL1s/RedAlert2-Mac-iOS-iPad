@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import { Octree } from '@brakebein/threeoctree';
 const CAMERA_PADDING = 3;
 let cameraClone: THREE.OrthographicCamera | THREE.PerspectiveCamera;
+const cullMatrix = new THREE.Matrix4();
+const cullFrustum = new THREE.Frustum();
 export class OctreeContainer extends RenderableContainer {
     autoCull: boolean;
     private lastCameraPosition: THREE.Vector3;
@@ -42,13 +44,12 @@ export class OctreeContainer extends RenderableContainer {
     cullChildren(): void {
         if (!this.camera.position.equals(this.lastCameraPosition)) {
             this.lastCameraPosition.copy(this.camera.position);
-            let matrix = this.computeProjectionMatrix();
+            const matrix = this.computeProjectionMatrix();
             this.camera.updateMatrixWorld(false);
             this.camera.matrixWorldInverse.copy(this.camera.matrixWorld).invert();
-            matrix = new THREE.Matrix4().multiplyMatrices(matrix, this.camera.matrixWorldInverse);
-            const frustum = new THREE.Frustum();
-            frustum.setFromProjectionMatrix(matrix);
-            this.frustumCuller.cull(this.tree, frustum);
+            cullMatrix.multiplyMatrices(matrix, this.camera.matrixWorldInverse);
+            cullFrustum.setFromProjectionMatrix(cullMatrix);
+            this.frustumCuller.cull(this.tree, cullFrustum);
         }
     }
     computeProjectionMatrix(): THREE.Matrix4 {
