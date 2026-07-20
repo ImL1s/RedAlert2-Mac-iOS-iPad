@@ -37,6 +37,8 @@ const sideAssets = new Map<SideType, {
 }>([
     [SideType.GDI, { img: "mpascrnl.shp", pal: "mpascrn.pal" }],
     [SideType.Nod, { img: "mpsscrnl.shp", pal: "mpsscrn.pal" }],
+    // YR ships the Yuri score screen in ra2md.mix::localmd.mix
+    [SideType.Yuri, { img: "mpyscrnl.shp", pal: "mpyscrn.pal" }],
 ]);
 export class ScoreScreen extends MainMenuScreen {
     private strings: any;
@@ -74,9 +76,11 @@ export class ScoreScreen extends MainMenuScreen {
         ]);
         this.controller.showSidebarButtons();
         const side = localPlayer.country?.side ?? SideType.GDI;
-        const assets = sideAssets.get(side);
+        let assets = sideAssets.get(side);
         if (!assets) {
-            throw new Error("Unsupported sideType " + side);
+            // A wrong background beats a blank score screen.
+            console.warn("No score screen assets for sideType " + side);
+            assets = sideAssets.get(SideType.GDI)!;
         }
         const [component] = this.jsxRenderer.render(jsx("container", { width: "100%", height: "100%" }, jsx("sprite", { image: assets.img, palette: assets.pal }), jsx(HtmlView, {
             width: "100%",

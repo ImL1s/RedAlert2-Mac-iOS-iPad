@@ -48,11 +48,11 @@ export class EngineerMission extends Mission {
         const { game } = context;
         const actionsApi = context.player.actions;
         const playerData = game.getPlayerData(context.player.name);
-        const engineers = this.getUnitsOfTypes(game, ...["SENGINEER", "ENGINEER"]);
+        const engineers = this.getUnitsOfTypes(game, ...["SENGINEER", "ENGINEER", "YENGINEER"]);
 
         const target = game.getGameObjectData(this.captureTargetId);
-        if (!target || target.owner === playerData.name) {
-            // Target gone or already captured, disband.
+        if (!target || !target.tile || target.owner === playerData.name) {
+            // Target gone (or in a tile-less limbo state) or already captured.
             return disbandMission();
         }
 
@@ -95,7 +95,7 @@ export class EngineerMission extends Mission {
             game.getCurrentTick() > this.lastCaptureAttemptTick + CAPTURE_COOLDOWN_TICKS
         ) {
             const engineer = engineers[0];
-            if (!canReachStructure(game, engineer, target)) {
+            if (!engineer || !canReachStructure(game, engineer, target)) {
                 return disbandMission(NO_PATH);
             }
             actionsApi.orderUnits([engineer.id], OrderType.Capture, this.captureTargetId);
@@ -123,6 +123,9 @@ export class EngineerMission extends Mission {
 }
 
 function canReachStructure(gameApi: GameApi, engineer: UnitData, target: GameObjectData) {
+    if (!engineer?.tile || !target?.tile) {
+        return false;
+    }
     const reachabilityMap = gameApi.map.getReachabilityMap(SpeedType.Foot, true);
     // unfortunately we have to test tiles around the target, because the target blocks pathing
     const range = computeAdjacentRect(toVector2(target.tile), target.foundation, 1);

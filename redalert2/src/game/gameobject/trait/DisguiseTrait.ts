@@ -58,6 +58,9 @@ export class DisguiseTrait {
                 return generalRules.alliedDisguise;
             case SideType.Nod:
                 return generalRules.sovietDisguise;
+            case SideType.Yuri:
+                // YR: [General]->ThirdDisguise (INIT); absent in RA2 rules.
+                return generalRules.thirdDisguise || generalRules.sovietDisguise;
             default:
                 return undefined;
         }

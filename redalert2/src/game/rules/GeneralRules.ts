@@ -43,6 +43,7 @@ export class GeneralRules {
     public flightLevel!: number;
     public alliedDisguise!: string;
     public sovietDisguise!: string;
+    public thirdDisguise!: string;
     public defaultMirageDisguises!: string[];
     public cloakDelay!: number;
     public infantryBlinkDisguiseTime!: number;
@@ -101,6 +102,7 @@ export class GeneralRules {
     public readIni(ini: IniReader): void {
         this.aircraftFogReveal = ini.getNumber('AircraftFogReveal');
         this.alliedDisguise = ini.getString('AlliedDisguise');
+        this.thirdDisguise = ini.getString('ThirdDisguise');
         this.baseUnit = ini.getArray('BaseUnit');
         this.bridgeVoxelMax = ini.getNumber('BridgeVoxelMax');
         this.buildSpeed = ini.getFixed('BuildSpeed');
