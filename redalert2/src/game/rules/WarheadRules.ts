@@ -3,6 +3,8 @@ export class WarheadRules {
     private rules: any;
     private verses: Map<number, number>;
     public affectsAllies!: boolean;
+    public airstrike!: boolean;
+    public psychedelic!: boolean;
     public animList!: string[];
     public bombDisarm!: boolean;
     public bullets!: boolean;
@@ -42,6 +44,8 @@ export class WarheadRules {
     }
     private parse(): void {
         this.affectsAllies = this.rules.getBool("AffectsAllies", true);
+        this.airstrike = this.rules.getBool("Airstrike");
+        this.psychedelic = this.rules.getBool("Psychedelic");
         this.animList = this.rules.getArray("AnimList");
         this.bombDisarm = this.rules.getBool("BombDisarm");
         this.bullets = this.rules.getBool("Bullets");

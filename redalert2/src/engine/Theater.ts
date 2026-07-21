@@ -65,7 +65,11 @@ export class Theater {
                     return this.libPalette;
                 if (!customPaletteName)
                     throw new Error('Custom palette name required for PaletteType.Custom');
-                const customPalette = this.palettes.get(customPaletteName + ".pal");
+                // Retail resolves Palette= with the theater extension first
+                // (libtem.pal / libsno.pal ...), then the bare name.
+                const theaterSuffix = this.settings.extension.replace(".", "");
+                const customPalette = this.palettes.get(customPaletteName + theaterSuffix + ".pal") ??
+                    this.palettes.get(customPaletteName + ".pal");
                 if (!customPalette) {
                     throw new Error(`Custom palette "${customPaletteName}" not found`);
                 }

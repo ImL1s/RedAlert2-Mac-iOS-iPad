@@ -70,6 +70,7 @@ export class Infantry {
     private lastVeteranLevel: VeteranLevel;
     private lastElevation: number;
     private lastLightTile: any;
+    private lastBerserk?: boolean;
     private lastOwnerColor: any;
     private lastWarpedOut: boolean;
     private lastCloaked: boolean;
@@ -117,6 +118,12 @@ export class Infantry {
         this.plugins.forEach((plugin) => plugin.updateLighting?.());
         this.updateBaseLight();
         this.extraLight.copy(this.baseExtraLight);
+        this.applyBerserkTint();
+    }
+    private applyBerserkTint(): void {
+        if (this.gameObject.berserkTrait?.isActive()) {
+            ExtraLightHelper.tintShpRed(this.extraLight);
+        }
     }
     get3DObject(): THREE.Object3D {
         return this.target;
@@ -184,10 +191,18 @@ export class Infantry {
             this.lastLightTile = this.gameObject.tile;
             this.updateBaseLight();
             this.extraLight.copy(this.baseExtraLight);
+            this.applyBerserkTint();
         }
         if (this.highlightAnimRunner.shouldUpdate()) {
             this.highlightAnimRunner.tick(deltaTime);
             ExtraLightHelper.multiplyShp(this.extraLight as any, this.baseExtraLight as any, this.highlightAnimRunner.getValue());
+            this.applyBerserkTint();
+        }
+        const berserk = !!this.gameObject.berserkTrait?.isActive();
+        if (berserk !== this.lastBerserk) {
+            this.lastBerserk = berserk;
+            this.extraLight.copy(this.baseExtraLight);
+            this.applyBerserkTint();
         }
         const currentOwner = this.disguise?.owner ?? owner;
         if (this.lastOwnerColor !== currentOwner.color) {

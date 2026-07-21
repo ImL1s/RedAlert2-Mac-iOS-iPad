@@ -13,6 +13,7 @@ interface VxlFile {
 }
 interface HvaSection {
     getMatrix(index: number): THREE.Matrix4;
+    matrices?: THREE.Matrix4[];
 }
 interface HvaFile {
     sections: HvaSection[];
@@ -29,6 +30,13 @@ export class VxlNonBatchedBuilder extends VxlBuilder {
     private castShadow: boolean;
     private material?: PalettePhongMaterial;
     private extraLight?: any;
+    private hvaAnimated?: Array<{
+        mesh: THREE.Mesh;
+        section: VxlSection;
+        hvaSection: HvaSection;
+        frameCount: number;
+    }>;
+    private lastHvaFrame: number = 0;
     constructor(vxlFile: VxlFile, palette: Palette, hvaFile: HvaFile | null, vxlGeometryPool: VxlGeometryPool, parent: THREE.Camera) {
         super(parent);
         this.vxlFile = vxlFile;
@@ -57,6 +65,10 @@ export class VxlNonBatchedBuilder extends VxlBuilder {
             const hvaSection = this.hvaFile?.sections[index];
             if (hvaSection) {
                 transformMatrix = section.scaleHvaMatrix(hvaSection.getMatrix(0));
+                const frameCount = hvaSection.matrices?.length ?? 1;
+                if (frameCount > 1) {
+                    (this.hvaAnimated ??= []).push({ mesh, section, hvaSection, frameCount });
+                }
             }
             mesh.applyMatrix4(transformMatrix);
             meshMap.set(section.name, mesh);
@@ -64,6 +76,30 @@ export class VxlNonBatchedBuilder extends VxlBuilder {
         });
         this.sections = meshMap;
         return meshMap;
+    }
+    // Multi-frame HVA animations (retail plays them continuously — e.g. the
+    // spy plane's propeller alternates two frames). Sections driven by the
+    // Rotors= smooth-spin system are excluded so the two don't fight.
+    updateHvaAnimation(timeMs: number, excludeSections?: Set<string>): void {
+        if (!this.hvaAnimated?.length) {
+            return;
+        }
+        const frame = Math.floor(timeMs / 125);
+        if (frame === this.lastHvaFrame) {
+            return;
+        }
+        this.lastHvaFrame = frame;
+        for (const { mesh, section, hvaSection, frameCount } of this.hvaAnimated) {
+            if (excludeSections?.has(section.name)) {
+                continue;
+            }
+            const matrix = section.scaleHvaMatrix(hvaSection.getMatrix(frame % frameCount));
+            mesh.position.set(0, 0, 0);
+            mesh.quaternion.set(0, 0, 0, 1);
+            mesh.scale.set(1, 1, 1);
+            mesh.applyMatrix4(matrix);
+            mesh.updateMatrix();
+        }
     }
     setPalette(palette: Palette): void {
         this.palette = palette;

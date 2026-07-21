@@ -43,6 +43,8 @@ export class TechnoRules extends ObjectRules {
     declare points: number;
     declare power: number;
     declare powered: boolean;
+    declare poweredUnit: boolean;
+    declare powersUnit?: string;
     declare prerequisite: string[];
     declare soylent: number;
     declare crateGoodie: boolean;
@@ -211,12 +213,17 @@ export class TechnoRules extends ObjectRules {
     declare pip: PipColor;
     declare passengers: number;
     declare gunner: boolean;
+    declare openTopped: boolean;
     declare ammo: number;
     declare initialAmmo: number;
     declare manualReload: boolean;
     declare storage: number;
     declare spawned: boolean;
     declare spawns: string;
+    declare airstrikeTeam: number;
+    declare eliteAirstrikeTeam: number;
+    declare airstrikeTeamType: string;
+    declare eliteAirstrikeTeamType: string;
     declare spawnsNumber: number;
     declare spawnRegenRate: number;
     declare spawnReloadRate: number;
@@ -314,6 +321,9 @@ export class TechnoRules extends ObjectRules {
         this.points = this.ini.getNumber("Points");
         this.power = this.ini.getNumber("Power");
         this.powered = this.ini.getBool("Powered");
+        // Retail YR: [ROBO] PoweredUnit=yes, [GAROBO] PowersUnit=ROBO.
+        this.poweredUnit = this.ini.getBool("PoweredUnit");
+        this.powersUnit = this.ini.getString("PowersUnit") || undefined;
         this.prerequisite = this.ini.getArray("Prerequisite");
         this.soylent = this.ini.getNumber("Soylent");
         this.crateGoodie = this.ini.getBool("CrateGoodie");
@@ -537,12 +547,17 @@ export class TechnoRules extends ObjectRules {
         this.pip = this.ini.getEnum("Pip", PipColor, PipColor.Green, true);
         this.passengers = this.ini.getNumber("Passengers");
         this.gunner = this.ini.getBool("Gunner");
+        this.openTopped = this.ini.getBool("OpenTopped");
         this.ammo = this.ini.getNumber("Ammo", -1);
         this.initialAmmo = this.ini.getNumber("InitialAmmo", -1);
         this.manualReload = this.ini.getBool("ManualReload", this.type === ObjectType.Aircraft);
         this.storage = this.ini.getNumber("Storage");
         this.spawned = this.ini.getBool("Spawned");
         this.spawns = this.ini.getString("Spawns");
+        this.airstrikeTeam = this.ini.getNumber("AirstrikeTeam", 2);
+        this.eliteAirstrikeTeam = this.ini.getNumber("EliteAirstrikeTeam", this.airstrikeTeam);
+        this.airstrikeTeamType = this.ini.getString("AirstrikeTeamType");
+        this.eliteAirstrikeTeamType = this.ini.getString("EliteAirstrikeTeamType") || this.airstrikeTeamType;
         this.spawnsNumber = this.ini.getNumber("SpawnsNumber");
         this.spawnRegenRate = this.ini.getNumber("SpawnRegenRate");
         this.spawnReloadRate = this.ini.getNumber("SpawnReloadRate");

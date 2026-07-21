@@ -112,6 +112,12 @@ export class AttackTrait implements NotifyTick, NotifyDamage, NotifyTeleport {
                 r.find((e: any) => e.warhead.rules.electricAssault)) {
                 r = r.filter((e: any) => e.warhead.rules.electricAssault);
             }
+            if (t?.isBuilding() &&
+                e.rules.airstrikeTeamType &&
+                !s.areFriendly(t, e) &&
+                r.find((e: any) => e.warhead.rules.airstrike)) {
+                r = r.filter((e: any) => e.warhead.rules.airstrike);
+            }
             if (!(n &&
                 t?.isAircraft() &&
                 t.missileSpawnTrait &&
@@ -337,6 +343,7 @@ export class AttackTrait implements NotifyTick, NotifyDamage, NotifyTeleport {
             return false;
         }
         const t = e.rules.opportunityFire ||
+            e.openToppedTrait?.hasArmedPassengers() ||
             (e.rules.balloonHover &&
                 e.unitOrderTrait.getCurrentTask()?.isAttackMove);
         if (e.isUnit() && t) {

@@ -12,6 +12,7 @@ export class CombatDamageRules {
     private ivanIconFlickerRate: number = 0;
     private ivanTimedDelay: number = 0;
     private ivanWarhead: string = '';
+    public openToppedRangeBonus: number = 1;
     private splashList: string[] = [];
     private v3EliteWarhead: string = '';
     private v3Warhead: string = '';
@@ -29,6 +30,8 @@ export class CombatDamageRules {
         this.ivanIconFlickerRate = ini.getNumber("IvanIconFlickerRate");
         this.ivanTimedDelay = ini.getNumber("IvanTimedDelay");
         this.ivanWarhead = ini.getString("IvanWarhead");
+        // Retail rulesmd.ini keeps OpenToppedRangeBonus in [CombatDamage], not [General]
+        this.openToppedRangeBonus = ini.getNumber("OpenToppedRangeBonus", 1);
         this.splashList = ini.getArray("SplashList");
         this.v3EliteWarhead = ini.getString("V3EliteWarhead");
         this.v3Warhead = ini.getString("V3Warhead");

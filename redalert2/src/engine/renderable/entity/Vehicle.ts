@@ -192,6 +192,10 @@ export class Vehicle {
     lastVeteranLevel?: any;
     lastElevation?: number;
     lastLightTile?: any;
+    barrelPitch?: number;
+    rotorSectionNames?: Set<string>;
+    lastBerserk?: boolean;
+    lastRobotOffline?: boolean;
     lastInvulnerable?: boolean;
     lastWarpedOut?: boolean;
     lastCloaked?: boolean;
@@ -259,6 +263,12 @@ export class Vehicle {
             (this.baseVxlExtraLight = this.lighting
                 .compute(this.objectArt.lightingType, this.gameObject.tile, this.gameObject.tileElevation)
                 .addScalar(this.rules.audioVisual.extraUnitLight));
+        if (this.gameObject.robotControlTrait?.isOffline()) {
+            // Shut-down robot tanks render at half brightness. SHP extra light
+            // is a delta around 0; VXL extra light is the cell multiplier.
+            this.baseShpExtraLight.addScalar(1).multiplyScalar(0.5).addScalar(-1);
+            this.baseVxlExtraLight.multiplyScalar(0.5);
+        }
     }
     registerPlugin(e) {
         this.plugins.push(e);
@@ -267,7 +277,13 @@ export class Vehicle {
         this.plugins.forEach((e) => e.updateLighting?.()),
             this.updateBaseLight(),
             this.vxlExtraLight.copy(this.baseVxlExtraLight),
-            this.shpExtraLight.copy(this.baseShpExtraLight);
+            this.shpExtraLight.copy(this.baseShpExtraLight),
+            this.applyBerserkTint();
+    }
+    applyBerserkTint() {
+        this.gameObject.berserkTrait?.isActive() &&
+            (A.ExtraLightHelper.tintVxlRed(this.vxlExtraLight),
+                A.ExtraLightHelper.tintShpRed(this.shpExtraLight));
     }
     get3DObject() {
         return this.target;
@@ -336,6 +352,10 @@ export class Vehicle {
                 this.updateClippingPlanes(this.gameObject.tile.z));
         var s = this.gameObject.invulnerableTrait.isActive(), a = s !== this.lastInvulnerable;
         this.lastInvulnerable = s;
+        var bk = !!this.gameObject.berserkTrait?.isActive(), bkChanged = bk !== this.lastBerserk;
+        this.lastBerserk = bk;
+        var ro = !!this.gameObject.robotControlTrait?.isOffline(), roChanged = ro !== this.lastRobotOffline;
+        (this.lastRobotOffline = ro), roChanged && this.updateBaseLight();
         var n = this.highlightAnimRunner.shouldUpdate();
         s && a && this.invulnAnimRunner.animate(),
             this.invulnAnimRunner.shouldUpdate() &&
@@ -355,12 +375,16 @@ export class Vehicle {
                 }),
                 this.placeholder?.setOpacity(t);
         }
-        if ((t || a || s || n) &&
+        if ((t || a || s || n || bkChanged || roChanged) &&
             (n && this.highlightAnimRunner.tick(i),
                 (p = s ? this.invulnAnimRunner.getValue() : 0),
                 (P = (n ? this.highlightAnimRunner.getValue() : 0) || p),
-                A.ExtraLightHelper.multiplyVxl(this.vxlExtraLight, this.baseVxlExtraLight, this.lighting.getAmbientIntensity(), P as any),
-                A.ExtraLightHelper.multiplyShp(this.shpExtraLight, this.baseShpExtraLight, P as any),
+                s
+                    ? (A.ExtraLightHelper.ironCurtainVxl(this.vxlExtraLight, this.baseVxlExtraLight, p as any),
+                        A.ExtraLightHelper.ironCurtainShp(this.shpExtraLight, this.baseShpExtraLight, p as any))
+                    : (A.ExtraLightHelper.multiplyVxl(this.vxlExtraLight, this.baseVxlExtraLight, this.lighting.getAmbientIntensity(), P as any),
+                        A.ExtraLightHelper.multiplyShp(this.shpExtraLight, this.baseShpExtraLight, P as any)),
+                this.applyBerserkTint(),
             this.gameObject.isDestroyed && this.resolveObjectRemove)) {
             if ((this.squidGrabAnim &&
                 (this.posObj?.remove(this.squidGrabAnim.get3DObject()),
@@ -497,12 +521,32 @@ export class Vehicle {
                 const turretRotation = THREE.MathUtils.degToRad(i - e);
                 this.turret.rotation.y = turretRotation;
                 this.turret.updateMatrix();
-                if (this.barrel) {
-                    this.barrel.rotation.y = turretRotation;
+            }
+            if (this.barrel) {
+                // Retail pitches barrels toward the target's elevation.
+                let desiredPitch = 0;
+                const pitchTarget = this.gameObject.attackTrait?.currentTarget?.obj;
+                const ownPos = this.gameObject.position?.worldPosition;
+                const targetPos = pitchTarget?.position?.worldPosition;
+                if (ownPos && targetPos) {
+                    const dy = targetPos.y - ownPos.y;
+                    const dh = Math.hypot(targetPos.x - ownPos.x, targetPos.z - ownPos.z);
+                    if (dh > 1) {
+                        desiredPitch = h.clamp(Math.atan2(dy, dh), -0.35, 0.35);
+                    }
+                }
+                const currentPitch = this.barrelPitch ?? 0;
+                const newPitch = currentPitch + (desiredPitch - currentPitch) * 0.2;
+                if (turretChanged || t || Math.abs(newPitch - currentPitch) > 0.0005) {
+                    this.barrelPitch = newPitch;
+                    this.barrel.rotation.order = "YXZ";
+                    this.barrel.rotation.y = THREE.MathUtils.degToRad(i - e);
+                    this.barrel.rotation.x = -newPitch;
                     this.barrel.updateMatrix();
                 }
             }
         }
+        this.vxlBuilders.forEach((builder) => builder.updateHvaAnimation?.(performance.now(), (this.rotorSectionNames ??= new Set((this.objectArt.rotors ?? []).map((rotor) => rotor.name)))));
         this.rotors?.forEach((rotor, rotorIndex) => {
             (this.rotorSpeeds[rotorIndex] =
                 g.RotorHelper.computeRotationStep(this.gameObject, this.rotorSpeeds[rotorIndex] ?? 0, this.objectArt.rotors[rotorIndex])),

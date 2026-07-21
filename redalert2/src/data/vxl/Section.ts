@@ -77,9 +77,11 @@ export class Section {
     scaleHvaMatrix(matrix: Matrix4): Matrix4 {
         const newMatrix = matrix.clone ? matrix.clone() : new Matrix4().fromArray!(matrix.elements);
         if (newMatrix.elements.length >= 15) {
-            newMatrix.elements[12] *= this.hvaMultiplier;
-            newMatrix.elements[13] *= this.hvaMultiplier;
-            newMatrix.elements[14] *= this.hvaMultiplier;
+            // Retail scales HVA translations by the tailer multiplier AND the
+            // per-axis section scale (CNCMaps VxlRenderer.cs:200-202).
+            newMatrix.elements[12] *= this.hvaMultiplier * this.scaleX;
+            newMatrix.elements[13] *= this.hvaMultiplier * this.scaleY;
+            newMatrix.elements[14] *= this.hvaMultiplier * this.scaleZ;
         }
         return newMatrix;
     }

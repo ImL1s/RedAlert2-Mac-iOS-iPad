@@ -11,7 +11,8 @@ import { RangeHelper } from './unit/RangeHelper';
 import { TargetUtil } from './unit/TargetUtil';
 import * as geometry from '@/game/math/geometry';
 import { RandomTileFinder } from '@/game/map/tileFinder/RandomTileFinder';
-import { clamp } from '@/util/math';
+import { clamp, lerp } from '@/util/math';
+import { TriggerAnimEvent } from '@/game/event/TriggerAnimEvent';
 import { MovementZone } from '@/game/type/MovementZone';
 import { StanceType } from './infantry/StanceType';
 import { MovePositionHelper } from './unit/MovePositionHelper';
@@ -691,6 +692,58 @@ export class Projectile extends GameObject {
                 warhead.canDamage(targetObj, detonationTile, detonationZone) &&
                 !targetObj.invulnerableTrait.isActive()) {
                 targetObj.magnetizedTrait.refresh(targetObj, game, this.fromObject);
+            }
+        }
+        if (warhead.rules.airstrike) {
+            shouldDetonate = false;
+            if (this.fromObject &&
+                !this.fromObject.isDestroyed &&
+                this.fromObject.airstrikeTrait &&
+                targetObj?.isBuilding() &&
+                !targetObj.isDestroyed &&
+                !game.areFriendly(targetObj, this.fromObject)) {
+                this.fromObject.airstrikeTrait.launchStrike(this.fromObject, targetObj, game);
+            }
+        }
+        if (warhead.rules.psychedelic) {
+            shouldDetonate = false;
+            // Berserk gas: no health damage; instead all vehicles/infantry in the
+            // spread go berserk. Vanilla YR derives the berserk duration (in ticks)
+            // from the verses-adjusted warhead damage.
+            const cellSpread = Math.max(warhead.rules.cellSpread, 0.5);
+            const rangeHelper = new RangeHelper(game.map.tileOccupation);
+            const affected = new Set<any>();
+            const tileFinder = new RadialTileFinder(game.map.tiles, game.map.mapBounds, detonationTile, { width: 1, height: 1 }, 0, Math.ceil(cellSpread), () => true);
+            let gasTile: any;
+            while ((gasTile = tileFinder.getNextTile())) {
+                for (const obj of game.map.getObjectsOnTile(gasTile)) {
+                    if (affected.has(obj))
+                        continue;
+                    if (!obj.isVehicle() && !obj.isInfantry())
+                        continue;
+                    // The gas source is immune to its own cloud
+                    if (obj === this.fromObject)
+                        continue;
+                    if (!obj.berserkTrait)
+                        continue;
+                    if (!warhead.canDamage(obj, gasTile, detonationZone))
+                        continue;
+                    const distance = rangeHelper.distance3(obj, this.position.worldPosition) / Coords.LEPTONS_PER_TILE;
+                    if (distance > cellSpread)
+                        continue;
+                    affected.add(obj);
+                    let duration = warhead.computeDamage(damage, obj, game);
+                    if (duration > 0) {
+                        duration = lerp(duration, warhead.rules.percentAtMax * duration, Math.min(1, distance / cellSpread));
+                    }
+                    if (duration > 0) {
+                        obj.berserkTrait.refresh(duration, game);
+                    }
+                }
+            }
+            // Normal detonation is skipped, so play the gas anim manually
+            if (warhead.rules.animList.length) {
+                game.events.dispatch(new TriggerAnimEvent(warhead.rules.animList[0], detonationTile));
             }
         }
         if (warhead.rules.temporal) {

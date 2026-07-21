@@ -435,12 +435,14 @@ export class Building {
                     this.invulnAnimRunner.tick(i),
                 (r || t || s) &&
                     (r && this.highlightAnimRunner.tick(i),
-                        (s = s ? this.invulnAnimRunner.getValue() : 0),
                         (n =
-                            (r ? this.highlightAnimRunner.getValue() : 0) || s),
-                        (s = this.lighting.getAmbientIntensity()),
-                        x.ExtraLightHelper.multiplyVxl(this.vxlExtraLight, this.baseVxlExtraLight, s, n),
-                        x.ExtraLightHelper.multiplyShp(this.shpExtraLight, this.baseShpExtraLight, n));
+                            (r ? this.highlightAnimRunner.getValue() : 0) ||
+                                (s ? this.invulnAnimRunner.getValue() : 0)),
+                        s
+                            ? (x.ExtraLightHelper.ironCurtainVxl(this.vxlExtraLight, this.baseVxlExtraLight, this.invulnAnimRunner.getValue()),
+                                x.ExtraLightHelper.ironCurtainShp(this.shpExtraLight, this.baseShpExtraLight, this.invulnAnimRunner.getValue()))
+                            : (x.ExtraLightHelper.multiplyVxl(this.vxlExtraLight, this.baseVxlExtraLight, this.lighting.getAmbientIntensity(), n),
+                                x.ExtraLightHelper.multiplyShp(this.shpExtraLight, this.baseShpExtraLight, n)));
             var a, n = this.gameObject.warpedOutTrait.isActive();
             if (n !== this.lastWarpedOut) {
                 let t = (this.lastWarpedOut = n) ? 0.5 : 1;
@@ -698,8 +700,10 @@ export class Building {
                 : e > 100 * this.rules.audioVisual.conditionRed
                     ? p.DamageType.CONDITION_YELLOW
                     : p.DamageType.CONDITION_RED),
-            ((t && this.objectRules.canBeOccupied) ||
-                t === p.DamageType.CONDITION_RED) &&
+            // Buildings carry one damaged frame: red shares it with yellow.
+            // Occupiables switch to it at yellow too (retail behavior); the
+            // occupied frame is handled separately in updateMainObjFrame.
+            t === p.DamageType.CONDITION_RED &&
                 (t -= 1),
             t);
     }

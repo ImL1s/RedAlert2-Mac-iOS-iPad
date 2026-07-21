@@ -42,7 +42,8 @@ export class ParasiteableTrait implements NotifyTick, NotifyHeal, NotifyDamage, 
     }
     uninfest(): void {
         if (this.parasite) {
-            if (this.parasiteWeapon.warhead.rules.paralyzes) {
+            if (this.parasiteWeapon.warhead.rules.paralyzes &&
+                !this.gameObject.robotControlTrait?.isOffline()) {
                 this.gameObject.moveTrait.setDisabled(false);
             }
             this.parasite = undefined;

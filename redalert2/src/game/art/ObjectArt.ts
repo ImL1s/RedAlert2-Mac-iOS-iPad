@@ -250,6 +250,11 @@ export class ObjectArt {
     // Set once per game from the loaded map's theater (see GameLoader);
     // AlternateArcticArt only swaps in the "A" art on Snow maps in retail.
     static inSnowTheater: boolean = false;
+    // Voxel rotor sections for rotorcraft whose art has no Rotors= key
+    // (Siege Chopper: main + tail rotor cylinders, same layout as SHAD).
+    private static readonly DEFAULT_ROTORS = new Map<string, string[]>([
+        ["SCHP", ["CYLINDER19", "CYLINDER57"]],
+    ]);
     get imageName(): string {
         return (this.image || this.rules.imageName) +
             (this.rules.alternateArcticArt && ObjectArt.inSnowTheater ? "A" : "");
@@ -352,7 +357,12 @@ export class ObjectArt {
         this.flat = flat;
     }
     private readRotors(): void {
-        const rotorNames = this.art.getArray("Rotors");
+        let rotorNames = this.art.getArray("Rotors");
+        if (!rotorNames.length) {
+            // Retail animates helicopter rotors natively (no art key); supply
+            // the voxel rotor section names for units artcd.ini doesn't cover.
+            rotorNames = ObjectArt.DEFAULT_ROTORS.get((this.art as any).name) ?? [];
+        }
         if (rotorNames.length) {
             const rotors: Rotor[] = [];
             for (let i = 0; i < rotorNames.length; ++i) {

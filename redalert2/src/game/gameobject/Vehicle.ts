@@ -8,6 +8,7 @@ import { DockableTrait } from "@/game/gameobject/trait/DockableTrait";
 import { Techno } from "@/game/gameobject/Techno";
 import { CrewedTrait } from "@/game/gameobject/trait/CrewedTrait";
 import { GunnerTrait } from "@/game/gameobject/trait/GunnerTrait";
+import { OpenToppedTrait } from "@/game/gameobject/trait/OpenToppedTrait";
 import { ParasiteableTrait } from "@/game/gameobject/trait/ParasiteableTrait";
 import { CrashableTrait } from "@/game/gameobject/trait/CrashableTrait";
 import { SubmergibleTrait } from "@/game/gameobject/trait/SubmergibleTrait";
@@ -31,6 +32,7 @@ interface VehicleRules {
     storage?: any;
     passengers: boolean;
     gunner: boolean;
+    openTopped: boolean;
     turret: boolean;
     consideredAircraft: boolean;
     landable: boolean;
@@ -61,6 +63,7 @@ export class Vehicle extends Techno {
     public harvesterTrait?: HarvesterTrait;
     public transportTrait?: TransportTrait;
     public gunnerTrait?: GunnerTrait;
+    public openToppedTrait?: OpenToppedTrait;
     public turretTrait?: TurretTrait;
     public parasiteableTrait?: ParasiteableTrait;
     public submergibleTrait?: SubmergibleTrait;
@@ -92,6 +95,10 @@ export class Vehicle extends Techno {
             if (rules.gunner) {
                 vehicle.gunnerTrait = new GunnerTrait();
                 vehicle.traits.add(vehicle.gunnerTrait);
+            }
+            if (rules.openTopped) {
+                vehicle.openToppedTrait = new OpenToppedTrait();
+                vehicle.traits.add(vehicle.openToppedTrait);
             }
         }
         if (rules.turret) {

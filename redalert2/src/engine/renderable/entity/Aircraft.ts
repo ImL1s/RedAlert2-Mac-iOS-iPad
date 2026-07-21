@@ -65,6 +65,7 @@ interface Voxels {
     get(key: string): any;
 }
 interface Lighting {
+    compute(lightingType: any, tile: any, height?: number): THREE.Vector3;
     computeNoAmbient(lightingType: any, tile: any): number;
     getAmbientIntensity(): number;
 }
@@ -119,6 +120,7 @@ export class Aircraft {
     private pipOverlay?: PipOverlay;
     private rotorSpeeds: number[] = [];
     private vxlBuilders: VxlBuilder[] = [];
+    private rotorSectionNames?: Set<string>;
     private highlightAnimRunner: HighlightAnimRunner;
     private invulnAnimRunner: InvulnerableAnimRunner;
     private plugins: Plugin[] = [];
@@ -256,9 +258,15 @@ export class Aircraft {
             }
             const invulnValue = isInvulnerable ? this.invulnAnimRunner.getValue() : 0;
             const highlightValue = (shouldUpdateHighlight ? this.highlightAnimRunner.getValue() : 0) || invulnValue;
-            const ambientIntensity = this.lighting.getAmbientIntensity();
-            ExtraLightHelper.multiplyVxl(this.extraLight as any, this.baseExtraLight as any, ambientIntensity, highlightValue);
+            if (isInvulnerable) {
+                ExtraLightHelper.ironCurtainVxl(this.extraLight as any, this.baseExtraLight as any, invulnValue);
+            }
+            else {
+                const ambientIntensity = this.lighting.getAmbientIntensity();
+                ExtraLightHelper.multiplyVxl(this.extraLight as any, this.baseExtraLight as any, ambientIntensity, highlightValue);
+            }
         }
+        this.vxlBuilders.forEach((builder: any) => builder.updateHvaAnimation?.(performance.now(), this.rotorSectionNames ??= new Set((this.objectArt.rotors ?? []).map((rotor: any) => rotor.name))));
         const isWarpedOut = this.gameObject.warpedOutTrait.isActive();
         const warpedOutChanged = isWarpedOut !== this.lastWarpedOut;
         this.lastWarpedOut = isWarpedOut;

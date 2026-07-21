@@ -50,8 +50,11 @@ export class MagnetizedTrait {
             return;
         }
         this.active = false;
-        gameObject.moveTrait?.setDisabled(false);
-        gameObject.attackTrait?.setDisabled(false);
+        // Don't wake a robot tank that is shut down (no control center).
+        if (!gameObject.robotControlTrait?.isOffline()) {
+            gameObject.moveTrait?.setDisabled(false);
+            gameObject.attackTrait?.setDisabled(false);
+        }
         if (applyDropDamage && this.game && !gameObject.isDestroyed) {
             const damage = Math.floor((gameObject.rules.strength ?? 0) * DROP_DAMAGE_FRACTION);
             if (damage > 0) {

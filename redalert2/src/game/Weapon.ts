@@ -74,6 +74,9 @@ interface GameObject {
             length: number;
         };
     };
+    openToppedTrait?: {
+        getArmedPassengerCount(): number;
+    };
     veteranTrait?: {
         getVeteranRofMultiplier(): number;
     };
@@ -165,6 +168,7 @@ export class Weapon {
     private useBurstDelay: boolean = false;
     private lateralMuzzleMult: number = 1;
     private distributedFireAngle: number;
+    public rangeBonus: number = 0;
     static factory(weaponName: string, weaponType: WeaponType, gameObject: GameObject, rulesEngine: RulesEngine, flh?: FlhCoords): Weapon {
         const weaponRules = rulesEngine.getWeapon(weaponName);
         let warheadName = weaponRules.warhead;
@@ -235,7 +239,7 @@ export class Weapon {
             this.gameObject.primaryWeapon) {
             return Math.min(this.gameObject.primaryWeapon.rules.range, this.rules.range);
         }
-        return this.rules.range;
+        return this.rules.range + this.rangeBonus;
     }
     get speed(): number {
         return Weapon.computeSpeed(this.rules, this.projectileRules);
@@ -245,6 +249,12 @@ export class Weapon {
         if (this.gameObject.isBuilding() &&
             this.gameObject.garrisonTrait?.isOccupied()) {
             rateOfFire /= this.gameObject.garrisonTrait.units.length;
+        }
+        const armedPassengers = this.gameObject.isVehicle()
+            ? (this.gameObject.openToppedTrait?.getArmedPassengerCount() ?? 0)
+            : 0;
+        if (armedPassengers > 0) {
+            rateOfFire /= armedPassengers;
         }
         if (this.gameObject.veteranTrait) {
             rateOfFire *= this.gameObject.veteranTrait.getVeteranRofMultiplier();

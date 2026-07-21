@@ -33,9 +33,12 @@ import { TntChargeTrait } from "@/game/gameobject/trait/TntChargeTrait";
 import { MindControllableTrait } from "@/game/gameobject/trait/MindControllableTrait";
 import { MagnetizedTrait } from "@/game/gameobject/trait/MagnetizedTrait";
 import { MindControllerTrait } from "@/game/gameobject/trait/MindControllerTrait";
+import { BerserkTrait } from "@/game/gameobject/trait/BerserkTrait";
+import { RobotControlTrait } from "@/game/gameobject/trait/RobotControlTrait";
 import { TemporalTrait } from "@/game/gameobject/trait/TemporalTrait";
 import { CloakableTrait } from "@/game/gameobject/trait/CloakableTrait";
 import { AirSpawnTrait } from "@/game/gameobject/trait/AirSpawnTrait";
+import { AirstrikeTrait } from "@/game/gameobject/trait/AirstrikeTrait";
 import { SpawnDebrisTrait } from "@/game/gameobject/trait/SpawnDebrisTrait";
 import { Debris } from "@/game/gameobject/Debris";
 import { DebrisRules } from "@/game/rules/DebrisRules";
@@ -185,6 +188,16 @@ export class ObjectFactory {
                 gameObject.magnetizedTrait = new MagnetizedTrait();
                 gameObject.traits.add(gameObject.magnetizedTrait);
             }
+            // Psychedelic (berserk) gas affects all vehicles and infantry,
+            // even psionics-immune ones.
+            if (gameObject.isVehicle() || gameObject.isInfantry()) {
+                gameObject.berserkTrait = new BerserkTrait(gameObject);
+                gameObject.traits.add(gameObject.berserkTrait);
+            }
+            if (gameObject.rules.poweredUnit && gameObject.isUnit()) {
+                gameObject.robotControlTrait = new RobotControlTrait(gameObject);
+                gameObject.traits.add(gameObject.robotControlTrait);
+            }
             const weapons = [gameObject.primaryWeapon, gameObject.secondaryWeapon];
             if (weapons.some(weapon => weapon?.warhead.rules.mindControl)) {
                 // Retail keys multi-control on the weapon name: the Mastermind
@@ -197,6 +210,11 @@ export class ObjectFactory {
                     : 1;
                 gameObject.mindControllerTrait = new MindControllerTrait(gameObject, capacity);
                 gameObject.traits.add(gameObject.mindControllerTrait);
+            }
+            if (gameObject.rules.airstrikeTeamType &&
+                weapons.some(weapon => weapon?.warhead.rules.airstrike)) {
+                gameObject.airstrikeTrait = new AirstrikeTrait();
+                gameObject.traits.add(gameObject.airstrikeTrait);
             }
             if (gameObject.rules.spawns) {
                 gameObject.airSpawnTrait = new AirSpawnTrait();

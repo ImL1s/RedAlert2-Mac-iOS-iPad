@@ -403,12 +403,19 @@ export class Game {
     }
     validateMapObjectRulesAndArt(name: string, type: ObjectType): boolean {
         if (!this.rules.hasObject(name, type)) {
-            console.warn(`Map object '${name}' has no rules section. Skipping.`);
-            return false;
+            // Retail defaults types that are declared in the type list but
+            // carry no ini section (CALA02/CALOND02 on official co-op maps).
+            if (!this.rules.ensureMapObjectDefaults?.(name, type)) {
+                console.warn(`Map object '${name}' has no rules section. Skipping.`);
+                return false;
+            }
         }
         if (!this.art.hasObject(name, type)) {
-            console.warn(`Map object '${name}' has no art section. Skipping.`);
-            return false;
+            this.art.registerDefaultedArt?.(name, type);
+            if (!this.art.hasObject(name, type)) {
+                console.warn(`Map object '${name}' has no art section. Skipping.`);
+                return false;
+            }
         }
         return true;
     }

@@ -198,6 +198,22 @@ try {
 }
 // --------------------------------------------------------------------------
 
+console.log("== Copying multiplayer taunts (Taunts/*.wav)");
+try {
+    const tauntsSrc = retailFile("Taunts");
+    mkdirSync(join(OUT, "Taunts"), { recursive: true });
+    let tauntCount = 0;
+    for (const entry of readdirSync(tauntsSrc)) {
+        if (/\.wav$/i.test(entry)) {
+            copyFileSync(join(tauntsSrc, entry), join(OUT, "Taunts", entry.toLowerCase()));
+            tauntCount++;
+        }
+    }
+    console.log(`   ${tauntCount} taunt files`);
+} catch {
+    console.warn("   (skip) Taunts folder not found");
+}
+
 rmSync(TMP, { recursive: true, force: true });
 
 console.log("== Writing manifest.json");

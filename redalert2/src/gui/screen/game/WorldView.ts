@@ -78,23 +78,23 @@ export class WorldView {
         const lighting = new Lighting(this.game.mapLightingTrait);
         this.disposables.add(lighting);
         worldScene.applyLighting(lighting);
-        // Map-placed lamp buildings (visible GALITE and the InvisibleInGame
-        // IN*LAMP/NEGLAMP family) light nearby cells: linear falloff over
+        // Lamp buildings (visible GALITE and the InvisibleInGame IN*LAMP/
+        // NEGLAMP family) light nearby cells: linear falloff over
         // LightVisibility leptons (256 per cell), tint and intensity summed
         // onto the map lighting. Same formula as the retail-validated CNCMaps
         // renderer. Seeded before MapRenderable so the tile layer bakes the
-        // pools of light.
-        for (const obj of this.game.getWorld().getAllObjects()) {
-            if (!obj.isBuilding?.()) {
-                continue;
-            }
+        // pools of light; a lamp's light dies with its building, like retail's
+        // LightSource.
+        const lampLights = new Map<any, Array<{ tile: any; light: any }>>();
+        const isLamp = (obj: any) => obj.isBuilding?.() &&
+            obj.rules?.lightVisibility &&
+            Math.abs(obj.rules.lightIntensity ?? 0) >= 0.001;
+        const addLampLights = (obj: any) => {
             const objRules: any = obj.rules;
-            if (!objRules?.lightVisibility || Math.abs(objRules.lightIntensity ?? 0) < 0.001) {
-                continue;
-            }
             const radius = objRules.lightVisibility / 256;
             const maxDelta = Math.ceil(radius);
             const center = obj.tile;
+            const entries: Array<{ tile: any; light: any }> = [];
             for (let dx = -maxDelta; dx <= maxDelta; dx++) {
                 for (let dy = -maxDelta; dy <= maxDelta; dy++) {
                     const tile = this.game.map.tiles.getByMapCoords(center.rx + dx, center.ry + dy);
@@ -106,15 +106,46 @@ export class WorldView {
                         continue;
                     }
                     const effect = (objRules.lightVisibility - 256 * distance) / objRules.lightVisibility;
-                    lighting.addTileLight(tile as any, {
+                    const light = {
                         red: effect * objRules.lightRedTint,
                         green: effect * objRules.lightGreenTint,
                         blue: effect * objRules.lightBlueTint,
                         intensity: effect * objRules.lightIntensity,
-                    });
+                    };
+                    lighting.addTileLight(tile as any, light);
+                    entries.push({ tile, light });
                 }
             }
+            lampLights.set(obj, entries);
+            return entries;
+        };
+        for (const obj of this.game.getWorld().getAllObjects()) {
+            if (isLamp(obj)) {
+                addLampLights(obj);
+            }
         }
+        const onLampSpawned = (obj: any) => {
+            if (isLamp(obj) && !lampLights.has(obj)) {
+                const entries = addLampLights(obj);
+                lighting.forceUpdate(entries.map((entry) => entry.tile));
+            }
+        };
+        const onLampRemoved = (obj: any) => {
+            const entries = lampLights.get(obj);
+            if (entries) {
+                lampLights.delete(obj);
+                for (const { tile, light } of entries) {
+                    lighting.removeTileLight(tile, light);
+                }
+                lighting.forceUpdate(entries.map((entry) => entry.tile));
+            }
+        };
+        this.game.getWorld().onObjectSpawned.subscribe(onLampSpawned);
+        this.game.getWorld().onObjectRemoved.subscribe(onLampRemoved);
+        this.disposables.add(() => {
+            this.game.getWorld().onObjectSpawned.unsubscribe(onLampSpawned);
+            this.game.getWorld().onObjectRemoved.unsubscribe(onLampRemoved);
+        });
         const lightingDirector = new LightingDirector(lighting, this.renderer, this.game.speed);
         lightingDirector.init();
         this.disposables.add(lightingDirector);

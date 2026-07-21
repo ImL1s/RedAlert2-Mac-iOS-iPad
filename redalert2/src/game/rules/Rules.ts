@@ -426,6 +426,39 @@ export class Rules {
             }
         });
     }
+    // Retail instantiates types that are declared in the type list but have no
+    // ini section with engine defaults (two official YR co-op maps place such
+    // buildings: CALA02, CALOND02). Synthesize a harmless default on demand.
+    ensureMapObjectDefaults(name: string, type: ObjectType): boolean {
+        if (this.hasObject(name, type)) {
+            return true;
+        }
+        const typeMaps = new Map<ObjectType, Map<number, string>>([
+            [ObjectType.Building, this.buildingTypes],
+            [ObjectType.Infantry, this.infantryTypes],
+            [ObjectType.Vehicle, this.vehicleTypes],
+            [ObjectType.Aircraft, this.aircraftTypes],
+            [ObjectType.Terrain, this.terrainTypes],
+        ]);
+        const typeMap = typeMaps.get(type);
+        const entry = typeMap && [...typeMap.entries()].find(([, typeName]) => typeName === name);
+        if (!entry) {
+            return false;
+        }
+        const section = this.ini.getOrCreateSection(name);
+        if (!section.has("Strength")) {
+            section.set("Strength", "400");
+        }
+        if (!section.has("TechLevel")) {
+            section.set("TechLevel", "-1");
+        }
+        if (!section.has("Insignificant")) {
+            section.set("Insignificant", "yes");
+        }
+        const rules = new ObjectRulesFactory().create(type, section, this.general, entry[0] as any);
+        this.allObjectRules.get(type)?.set(name, rules as any);
+        return true;
+    }
     private readCountries(): void {
         this.countryTypes.forEach((name, id) => {
             const section = this.ini.getSection(name);

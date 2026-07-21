@@ -32,6 +32,27 @@ export class Art {
             ? this.rules.getObject(name, type)
             : new ObjectRules(type, new IniSection(name)), new IniSection(name));
     }
+    // Companion to Rules.ensureMapObjectDefaults: register defaulted art for a
+    // declared-but-sectionless type so it renders. Civilian buildings ship
+    // theater-suffixed SHPs (cala02.tem/.urb), so buildings default Theater=yes.
+    registerDefaultedArt(name: string, type: ObjectType): void {
+        let artMap = this.objectArt.get(type);
+        if (!artMap) {
+            artMap = new Map();
+            this.objectArt.set(type, artMap);
+        }
+        if (artMap.has(name)) {
+            return;
+        }
+        const section = new IniSection(name);
+        if (type === ObjectType.Building) {
+            section.set("Theater", "yes");
+        }
+        const rules = this.rules.hasObject(name, type)
+            ? this.rules.getObject(name, type)
+            : new ObjectRules(type, new IniSection(name));
+        artMap.set(name, ObjectArt.factory(type, rules, this.artIni, section));
+    }
     getAnimation(name: string): ObjectArt {
         return this.getObject(name, ObjectType.Animation);
     }
