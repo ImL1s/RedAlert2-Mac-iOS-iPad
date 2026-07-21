@@ -7,6 +7,7 @@ export class GameMenu {
     private _onQuit = new EventDispatcher<GameMenu, void>();
     private _onObserve = new EventDispatcher<GameMenu, void>();
     private _onCancel = new EventDispatcher<GameMenu, void>();
+    private _onSave = new EventDispatcher<GameMenu, void>();
     private _onToggleAlliance = new EventDispatcher<GameMenu, any>();
     private _onSendMessage = new EventDispatcher<GameMenu, any>();
     private disposables = new CompositeDisposable();
@@ -22,6 +23,9 @@ export class GameMenu {
     }
     get onCancel() {
         return this._onCancel.asEvent();
+    }
+    get onSave() {
+        return this._onSave.asEvent();
     }
     get onToggleAlliance() {
         return this._onToggleAlliance.asEvent();
@@ -60,7 +64,14 @@ export class GameMenu {
             onCancel: () => {
                 this.controller!.close();
                 this._onCancel.dispatch(this);
-            }
+            },
+            onSave: this.isSinglePlayer
+                ? () => {
+                    this.controller!.close();
+                    this._onCancel.dispatch(this);
+                    this._onSave.dispatch(this);
+                }
+                : undefined
         });
     }
     close(): void {

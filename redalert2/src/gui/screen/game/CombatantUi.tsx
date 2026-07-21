@@ -144,6 +144,10 @@ export class CombatantUi {
         };
         const world = this.game.getWorld();
         this.sidebarModel.updateAvailableObjects(this.game.art);
+        // Seed the EVA baseline before the first base building exists, so the
+        // MCV deploy announces "new construction options" (and games that start
+        // with a deployed base stay quiet).
+        this.soundHandler.handleAvailableObjectsUpdate?.(this.player.production.getAvailableObjects());
         world.onObjectSpawned.subscribe(updateAvailableObjects);
         world.onObjectRemoved.subscribe(updateAvailableObjects);
         this.disposables.add(() => world.onObjectSpawned.unsubscribe(updateAvailableObjects), () => world.onObjectRemoved.unsubscribe(updateAvailableObjects));

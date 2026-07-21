@@ -9,6 +9,7 @@ interface GameMenuHomeParams {
     onCancel: () => void;
     onQuit?: () => void;
     onObserve?: () => void;
+    onSave?: () => void;
     observeAllowed?: boolean;
 }
 interface SidebarButton {
@@ -49,6 +50,13 @@ export class GameMenuHomeScreen extends GameMenuScreen {
                     this.controller?.pushScreen?.(ScreenType.Options);
                 },
             },
+            ...(params.onSave
+                ? [{
+                    label: strings.get("GUI:SaveGame") || "Save Game",
+                    tooltip: "Save this match to continue it later",
+                    onClick: params.onSave,
+                }]
+                : []),
             {
                 label: strings.get("GUI:Fullscreen", getHumanReadableKey(FullScreen.hotKey)),
                 tooltip: strings.get("STT:Fullscreen"),

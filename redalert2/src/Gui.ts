@@ -335,6 +335,8 @@ export class Gui {
         subScreens.set(MainMenuScreenType.OptionsKeyboard, KeyboardScreen);
         const { ReplaySelScreen } = await import('./gui/screen/replay/ReplaySelScreen.js');
         subScreens.set(MainMenuScreenType.ReplaySelection, ReplaySelScreen);
+        const { LoadGameScreen } = await import('./gui/screen/mainMenu/loadGame/LoadGameScreen.js');
+        subScreens.set(MainMenuScreenType.LoadGame, LoadGameScreen);
         const { ReplayManager } = await import('./gui/ReplayManager.js');
         let replayManager: any;
         try {

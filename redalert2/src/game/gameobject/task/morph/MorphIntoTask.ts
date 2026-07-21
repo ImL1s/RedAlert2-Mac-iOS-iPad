@@ -3,6 +3,7 @@ import { ObjectType } from "@/engine/type/ObjectType";
 import { Building, BuildStatus } from "@/game/gameobject/Building";
 import { MoveTask } from "@/game/gameobject/task/move/MoveTask";
 import { ObjectMorphEvent } from "@/game/event/ObjectMorphEvent";
+import { BuildingPlaceEvent } from "@/game/event/BuildingPlaceEvent";
 import { TurnTask } from "@/game/gameobject/task/TurnTask";
 import { PackBuildingTask } from "@/game/gameobject/task/morph/PackBuildingTask";
 export class MorphIntoTask extends Task {
@@ -51,6 +52,8 @@ export class MorphIntoTask extends Task {
             unit.dispose();
             [newObject] = constructionWorker.placeAt(this.morphInto.name, tile);
             newObject.healthTrait.health = unit.healthTrait.health;
+            // Deploying plays the same slam as sidebar placement (retail).
+            this.game.events.dispatch(new BuildingPlaceEvent(newObject));
         }
         else {
             const moveTasks = unit.unitOrderTrait.getTasks()

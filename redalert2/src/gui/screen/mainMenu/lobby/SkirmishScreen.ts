@@ -292,7 +292,9 @@ export class SkirmishScreen extends MainMenuScreen {
         }
 
         const gameId = '0';
-        const timestamp = Date.now();
+        // Second-aligned so the replay/save format (whole seconds) round-trips
+        // the RNG seed exactly on load.
+        const timestamp = Math.floor(Date.now() / 1000) * 1000;
         const fallbackRoute = new MainMenuRoute(MainMenuScreenType.Skirmish, {});
         this.rootController.createGame(gameId, timestamp, '', this.playerName, gameOpts, true, false, false, false, fallbackRoute);
     }

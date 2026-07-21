@@ -277,10 +277,18 @@ export class GameScreen extends RootScreen {
         const mapTitle = gameOpts.mapTitle ?? gameOpts.mapName ?? 'Unknown';
         replay.name = Replay.sanitizeFileName(`${playerNames} - ${mapTitle}`);
         this.disposables.add(() => this.replay = undefined);
+        const resumeReplay = this.isSinglePlayer ? params.resumeReplay : undefined;
+        if (resumeReplay) {
+            replay.actionRecords = resumeReplay.actionRecords.map((record: any) => ({ ...record }));
+            replay.hashCheckpoints = [...(resumeReplay.hashCheckpoints ?? [])];
+            replay.name = resumeReplay.name?.replace(/^\[SAVE\] /, '') ?? replay.name;
+        }
         const replayRecorder = this.replayRecorderInstance = new ReplayRecorder(game, replay);
         this.disposables.add(() => this.replayRecorderInstance = undefined);
         if (this.isSinglePlayer) {
-            this.gameTurnMgr = new SoloPlayTurnManager(game, localPlayer, actionQueue, this.actionLogger, replayRecorder);
+            this.gameTurnMgr = new SoloPlayTurnManager(game, localPlayer, actionQueue, this.actionLogger, replayRecorder, resumeReplay
+                ? { records: resumeReplay.actionRecords, untilTick: resumeReplay.finishedTick, actionFactory }
+                : undefined);
         }
         else if (this.isLanGame) {
             if (!this.lanMatchSession) {
@@ -1094,6 +1102,15 @@ export class GameScreen extends RootScreen {
         game.onEnd.subscribe(gameEndHandler);
         this.disposables.add(() => game.onEnd.unsubscribe(gameEndHandler));
         game.start?.();
+        // Save-game load: resimulate the recorded ticks synchronously before
+        // the render loop starts, so play resumes exactly at the saved tick.
+        if (this.gameTurnMgr instanceof SoloPlayTurnManager && this.gameTurnMgr.isResuming()) {
+            const startTime = performance.now();
+            while (this.gameTurnMgr.isResuming() &&
+                !this.gameTurnMgr.getErrorState() &&
+                this.gameTurnMgr.doGameTurn(performance.now())) { }
+            console.log(`[GameScreen] Resumed save at tick ${game.currentTick} in ${Math.round(performance.now() - startTime)}ms`);
+        }
         if (this.usesServerConnection()) {
             this.initNetStats(localPlayer);
         }
@@ -1248,6 +1265,33 @@ export class GameScreen extends RootScreen {
                 this.mixer.setMuted(ChannelType.Ambient, false);
             }
         });
+        menu.onSave.subscribe(() => {
+            this.saveGame(game).catch((error: any) => {
+                console.error('[GameScreen] Failed to save game', error);
+                this.toastApi?.push?.(this.strings.get('GUI:SaveReplayError'));
+            });
+        });
+    }
+    private async saveGame(game: any): Promise<void> {
+        const replay = this.replay;
+        if (!replay || !this.isSinglePlayer || !this.replayManager) {
+            return;
+        }
+        const save = new Replay();
+        save.gameId = replay.gameId;
+        save.gameTimestamp = replay.gameTimestamp;
+        save.gameOpts = replay.gameOpts;
+        save.engineVersion = replay.engineVersion;
+        save.modHash = replay.modHash;
+        save.timestamp = Date.now();
+        save.actionRecords = replay.actionRecords.map((record: any) => ({ ...record }));
+        save.hashCheckpoints = [...replay.hashCheckpoints];
+        save.finish(game.currentTick);
+        const mapTitle = replay.gameOpts?.mapTitle ?? replay.gameOpts?.mapName ?? 'Skirmish';
+        const minutes = Math.floor(game.currentTick / (15 * 60));
+        save.name = Replay.sanitizeFileName(`[SAVE] ${mapTitle} - ${minutes}min`);
+        await this.replayManager.saveReplay(save, true);
+        this.toastApi?.push?.('Game saved');
     }
     private async onGameEnd(game: any, localPlayer: any, eva: any, replay: any): Promise<void> {
         if (this.gameEndHandled) {

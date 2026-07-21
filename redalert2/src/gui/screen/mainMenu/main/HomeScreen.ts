@@ -6,6 +6,7 @@ import { MusicType } from '../../../../engine/sound/Music';
 import { MessageBoxApi } from '../../../component/MessageBoxApi';
 import { FullScreen } from '../../../FullScreen';
 import { getHumanReadableKey } from '@/gui/screen/options/component/getHumanReadableKey';
+import { isNativeShell } from '@/shell/iosSeed';
 interface SidebarButton {
     label: string;
     tooltip?: string;
@@ -38,6 +39,11 @@ export class HomeScreen implements Screen {
     }
     onEnter(): void {
         console.log('[HomeScreen] Entering home screen');
+        // The native (iOS) build ships a focused menu: Skirmish, Load Game,
+        // LAN and Options. The other entries stay available in web builds
+        // (and their underlying systems remain in the bundle — saves are
+        // built on the replay machinery).
+        const nativeShell = isNativeShell();
         const buttons: SidebarButton[] = [
             {
                 label: 'Skirmish',
@@ -56,23 +62,37 @@ export class HomeScreen implements Screen {
                 }
             },
             {
-                label: 'Live Interaction',
-                tooltip: 'Enter live interaction mode, where viewer events such as joins, likes, and gifts drive both sides to send units into battle',
+                label: 'Load Game',
+                tooltip: 'Continue a saved skirmish match',
                 onClick: () => {
-                    console.log('[HomeScreen] Live Interaction clicked');
-                    window.location.hash = '/liveinteraction';
-                }
-            },
-            {
-                label: 'Replays',
-                tooltip: 'View and play back game replays',
-                onClick: () => {
-                    console.log('[HomeScreen] Replays clicked');
+                    console.log('[HomeScreen] Load Game clicked');
                     if (this.controller) {
-                        this.controller.pushScreen(MainMenuScreenType.ReplaySelection);
+                        this.controller.pushScreen(MainMenuScreenType.LoadGame);
                     }
                 }
             },
+            ...(!nativeShell
+                ? [
+                    {
+                        label: 'Live Interaction',
+                        tooltip: 'Enter live interaction mode, where viewer events such as joins, likes, and gifts drive both sides to send units into battle',
+                        onClick: () => {
+                            console.log('[HomeScreen] Live Interaction clicked');
+                            window.location.hash = '/liveinteraction';
+                        }
+                    },
+                    {
+                        label: 'Replays',
+                        tooltip: 'View and play back game replays',
+                        onClick: () => {
+                            console.log('[HomeScreen] Replays clicked');
+                            if (this.controller) {
+                                this.controller.pushScreen(MainMenuScreenType.ReplaySelection);
+                            }
+                        }
+                    },
+                ]
+                : []),
             {
                 label: 'LAN Multiplayer',
                 tooltip: 'Exchange SDP manually to establish a LAN P2P data channel',
@@ -84,7 +104,7 @@ export class HomeScreen implements Screen {
                 }
             },
         ];
-        if (this.storageEnabled) {
+        if (this.storageEnabled && !nativeShell) {
             buttons.push({
                 label: this.strings.get('GUI:Mods') || 'Mods',
                 tooltip: this.strings.get('STT:Mods') || 'Manage and play modified versions of the base game',
@@ -94,16 +114,19 @@ export class HomeScreen implements Screen {
                 }
             });
         }
-        buttons.push({
-            label: this.strings.get('TS:InfoAndCredits') || 'Info & Credits',
-            tooltip: this.strings.get('STT:InfoAndCredits') || 'Information and credits',
-            onClick: () => {
-                console.log('[HomeScreen] Info & Credits clicked');
-                if (this.controller) {
-                    this.controller.pushScreen(MainMenuScreenType.InfoAndCredits);
+        if (!nativeShell) {
+            buttons.push({
+                label: this.strings.get('TS:InfoAndCredits') || 'Info & Credits',
+                tooltip: this.strings.get('STT:InfoAndCredits') || 'Information and credits',
+                onClick: () => {
+                    console.log('[HomeScreen] Info & Credits clicked');
+                    if (this.controller) {
+                        this.controller.pushScreen(MainMenuScreenType.InfoAndCredits);
+                    }
                 }
-            }
-        }, {
+            });
+        }
+        buttons.push({
             label: this.strings.get('GUI:Options') || 'Options',
             tooltip: this.strings.get('STT:MainButtonOptions') || 'Game options and settings',
             onClick: () => {
@@ -112,25 +135,28 @@ export class HomeScreen implements Screen {
                     this.controller.pushScreen(MainMenuScreenType.Options);
                 }
             }
-        }, {
-            label: 'Test Tools',
-            tooltip: 'Access low-level file system and testing tools',
-            onClick: () => {
-                console.log('[HomeScreen] Test Entry clicked');
-                if (this.controller) {
-                    this.controller.pushScreen(MainMenuScreenType.TestEntry);
-                }
-            }
-        }, {
-            label: this.strings.get('GUI:Fullscreen', getHumanReadableKey(FullScreen.hotKey)) || 'Fullscreen',
-            tooltip: this.strings.get('STT:Fullscreen') || 'Toggle full screen mode',
-            isBottom: true,
-            disabled: this.fullScreen ? !this.fullScreen.isAvailable() : false,
-            onClick: () => {
-                console.log('[HomeScreen] Fullscreen clicked');
-                this.toggleFullscreen();
-            }
         });
+        if (!nativeShell) {
+            buttons.push({
+                label: 'Test Tools',
+                tooltip: 'Access low-level file system and testing tools',
+                onClick: () => {
+                    console.log('[HomeScreen] Test Entry clicked');
+                    if (this.controller) {
+                        this.controller.pushScreen(MainMenuScreenType.TestEntry);
+                    }
+                }
+            }, {
+                label: this.strings.get('GUI:Fullscreen', getHumanReadableKey(FullScreen.hotKey)) || 'Fullscreen',
+                tooltip: this.strings.get('STT:Fullscreen') || 'Toggle full screen mode',
+                isBottom: true,
+                disabled: this.fullScreen ? !this.fullScreen.isAvailable() : false,
+                onClick: () => {
+                    console.log('[HomeScreen] Fullscreen clicked');
+                    this.toggleFullscreen();
+                }
+            });
+        }
         if (this.controller) {
             this.controller.setSidebarButtons(buttons);
             this.controller.showSidebarButtons();
