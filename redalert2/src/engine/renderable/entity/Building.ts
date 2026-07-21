@@ -272,7 +272,10 @@ export class Building {
         (this.baseShpExtraLight = this.lighting
             .compute(this.objectArt.lightingType, this.gameObject.tile)
             .addScalar(-1)),
-            (this.baseVxlExtraLight = new THREE.Vector3().setScalar(Math.PI * 1.5 + this.lighting.computeNoAmbient(this.objectArt.lightingType, this.gameObject.tile)));
+            // Voxel cell light (turrets): full per-tile multiplier; the shader
+            // applies retail's (0.8 + 1.3*dotNL) on top.
+            (this.baseVxlExtraLight = this.lighting
+                .compute(this.objectArt.lightingType, this.gameObject.tile));
     }
     updateLighting() {
         this.updateBaseLight(),

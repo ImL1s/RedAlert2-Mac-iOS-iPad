@@ -69,6 +69,7 @@ export class Infantry {
     private disguise: any;
     private lastVeteranLevel: VeteranLevel;
     private lastElevation: number;
+    private lastLightTile: any;
     private lastOwnerColor: any;
     private lastWarpedOut: boolean;
     private lastCloaked: boolean;
@@ -175,9 +176,12 @@ export class Infantry {
             }
             this.lastVeteranLevel = veteranLevel;
         }
+        // Refresh cell lighting on any tile change (not just elevation) so
+        // lamp pools follow units moving horizontally, as in retail.
         const elevation = this.gameObject.tile.z + this.gameObject.tileElevation;
-        if (this.lastElevation === undefined || this.lastElevation !== elevation) {
+        if (this.lastElevation === undefined || this.lastElevation !== elevation || this.lastLightTile !== this.gameObject.tile) {
             this.lastElevation = elevation;
+            this.lastLightTile = this.gameObject.tile;
             this.updateBaseLight();
             this.extraLight.copy(this.baseExtraLight);
         }

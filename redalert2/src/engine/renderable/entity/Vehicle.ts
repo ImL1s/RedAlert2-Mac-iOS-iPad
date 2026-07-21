@@ -191,6 +191,7 @@ export class Vehicle {
     lastDirectionDelta?: number;
     lastVeteranLevel?: any;
     lastElevation?: number;
+    lastLightTile?: any;
     lastInvulnerable?: boolean;
     lastWarpedOut?: boolean;
     lastCloaked?: boolean;
@@ -252,7 +253,12 @@ export class Vehicle {
             .compute(this.objectArt.lightingType, this.gameObject.tile, this.gameObject.tileElevation)
             .addScalar(-1)
             .addScalar(this.rules.audioVisual.extraUnitLight)),
-            (this.baseVxlExtraLight = new THREE.Vector3().setScalar(Math.PI * 1.5 + this.lighting.computeNoAmbient(this.objectArt.lightingType, this.gameObject.tile, this.gameObject.tileElevation) + this.rules.audioVisual.extraUnitLight));
+            // Voxel cell light: the full per-tile multiplier (ambient + level +
+            // lamps, tinted). The shader applies retail's (0.8 + 1.3*dotNL) on
+            // top — see paletteFullLightFragment.
+            (this.baseVxlExtraLight = this.lighting
+                .compute(this.objectArt.lightingType, this.gameObject.tile, this.gameObject.tileElevation)
+                .addScalar(this.rules.audioVisual.extraUnitLight));
     }
     registerPlugin(e) {
         this.plugins.push(e);
@@ -320,9 +326,12 @@ export class Vehicle {
                     void 0 !== this.lastVeteranLevel &&
                     this.highlightAnimRunner.animate(30),
                     (this.lastVeteranLevel = this.gameObject.veteranLevel));
-        var e = this.gameObject.tile.z + this.gameObject.tileElevation, t = void 0 === this.lastElevation || this.lastElevation !== e;
+        // Refresh cell lighting on any tile change (not just elevation) so
+        // lamp pools follow units moving horizontally, as in retail.
+        var e = this.gameObject.tile.z + this.gameObject.tileElevation, t = void 0 === this.lastElevation || this.lastElevation !== e || this.lastLightTile !== this.gameObject.tile;
         t &&
             ((this.lastElevation = e),
+                (this.lastLightTile = this.gameObject.tile),
                 this.updateBaseLight(),
                 this.updateClippingPlanes(this.gameObject.tile.z));
         var s = this.gameObject.invulnerableTrait.isActive(), a = s !== this.lastInvulnerable;

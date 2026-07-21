@@ -247,8 +247,12 @@ export class ObjectArt {
         this.removeOccupy = this.readAddRemoveOccupy("RemoveOccupy");
         this.rotates = this.art.getBool("Rotates", false);
     }
+    // Set once per game from the loaded map's theater (see GameLoader);
+    // AlternateArcticArt only swaps in the "A" art on Snow maps in retail.
+    static inSnowTheater: boolean = false;
     get imageName(): string {
-        return (this.image || this.rules.imageName) + (this.rules.alternateArcticArt ? "A" : "");
+        return (this.image || this.rules.imageName) +
+            (this.rules.alternateArcticArt && ObjectArt.inSnowTheater ? "A" : "");
     }
     get cameo(): string {
         const cameo = this.art.getString("Cameo") || ObjectArt.MISSING_CAMEO;

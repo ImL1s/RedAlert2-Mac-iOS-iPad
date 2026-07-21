@@ -42,6 +42,19 @@ uniform vec3 extraLight;
 varying float vInstancePaletteOffset;
 varying vec3 vInstanceExtraLight;
 #endif
+
+// Retail lighting multiplies the palette's stored (display-referred) bytes
+// directly. The palette texture is sRGB-tagged, so sampling hardware-decodes
+// to linear; ra2ToPaletteSpace restores the stored values so every lighting
+// multiply below happens in the same domain as the original engine, and
+// ra2FromPaletteSpace (see paletteOutputFrag) inverts it again right before
+// the renderer's sRGB output encode — the pair cancels exactly.
+vec3 ra2ToPaletteSpace( vec3 c ) {
+    return mix( c * 12.92, 1.055 * pow( c, vec3( 1.0 / 2.4 ) ) - 0.055, step( vec3( 0.0031308 ), c ) );
+}
+vec3 ra2FromPaletteSpace( vec3 c ) {
+    return mix( c / 12.92, pow( ( c + 0.055 ) / 1.055, vec3( 2.4 ) ), step( vec3( 0.04045 ), c ) );
+}
 `,
     paletteColorFrag: `
   float paletteColorIndex;
@@ -72,6 +85,10 @@ varying vec3 vInstanceExtraLight;
   diffuseColor.a *= opacity;
   #endif
   diffuseColor = clamp(diffuseColor, 0.0, 1.0);
+  diffuseColor.rgb = ra2ToPaletteSpace(diffuseColor.rgb);
+`,
+    paletteOutputFrag: `
+  gl_FragColor.rgb = ra2FromPaletteSpace(clamp(gl_FragColor.rgb, 0.0, 1.0));
 `,
     paletteBasicLightFragment: `
   #ifdef INSTANCE_TRANSFORM
@@ -84,29 +101,25 @@ varying vec3 vInstanceExtraLight;
 `,
     paletteFullLightFragment: `
   #ifdef INSTANCE_TRANSFORM
-  vec3 extraIrradiance = vInstanceExtraLight.rgb;
+  vec3 vxlCellLight = vInstanceExtraLight.rgb;
   #else
-  vec3 extraIrradiance = extraLight.rgb;
+  vec3 vxlCellLight = extraLight.rgb;
   #endif
 
+  float vxlDotNL = 0.0;
   #if ( NUM_DIR_LIGHTS > 0 )
-    #pragma unroll_loop_start
-    for ( int i = 0; i < NUM_DIR_LIGHTS; i ++ ) {
-      vec3 lightDirection = normalize( directionalLights[ i ].direction );
-      float dotNL = saturate( dot( geometryNormal, lightDirection ) );
-      vec3 customIrradiance = dotNL * directionalLights[ i ].color * extraIrradiance;
-      
-      reflectedLight.directDiffuse += customIrradiance * BRDF_Lambert( material.diffuseColor );
-      #ifdef USE_PHONG
-        reflectedLight.directSpecular += customIrradiance * BRDF_BlinnPhong( lightDirection, geometryViewDir, geometryNormal, material.specularColor, material.specularShininess ) * material.specularStrength;
-      #endif
-    }
-    #pragma unroll_loop_end
+  vxlDotNL = saturate( dot( geometryNormal, normalize( directionalLights[ 0 ].direction ) ) );
   #endif
 
-  vec3 ambientIrradiance = getAmbientLightIrradiance( ambientLightColor );
-  ambientIrradiance *= extraIrradiance;
-  reflectedLight.indirectDiffuse += ambientIrradiance * BRDF_Lambert( material.diffuseColor );
+  // Retail voxel shading (CNCMaps VxlRenderer: Ambient 0.8, Diffuse 1.3):
+  // palette byte x (0.8 + 1.3*dotNL), then the per-cell map/lamp light
+  // (vxlCellLight = Lighting.compute for the occupied tile), all in the
+  // palette's stored-byte domain. This REPLACES the stock Phong result:
+  // retail voxels are diffuse-only with no specular highlight.
+  reflectedLight.directDiffuse = ( 0.8 + 1.3 * vxlDotNL ) * vxlCellLight * material.diffuseColor;
+  reflectedLight.indirectDiffuse = vec3( 0.0 );
+  reflectedLight.directSpecular = vec3( 0.0 );
+  reflectedLight.indirectSpecular = vec3( 0.0 );
 `,
     vertexColorMultParsVertex: `
 #ifdef USE_VERTEX_COLOR_MULT

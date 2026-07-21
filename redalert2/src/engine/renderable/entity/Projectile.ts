@@ -94,7 +94,8 @@ export class Projectile {
     updateLighting(): void {
         this.plugins.forEach((plugin) => plugin.updateLighting?.());
         if (this.objectArt.isVoxel) {
-            this.extraLight.setScalar(Math.PI * 1.5 + this.lighting.computeNoAmbient(this.objectArt.lightingType, this.gameObject.tile, this.gameObject.tileElevation));
+            // Voxel cell light: see paletteFullLightFragment.
+            this.extraLight.copy(this.lighting.compute(this.objectArt.lightingType, this.gameObject.tile, this.gameObject.tileElevation));
         }
         else {
             this.extraLight

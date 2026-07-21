@@ -24,7 +24,8 @@ const shaderMaterial: ShaderMaterial = {
     fragmentShader: THREE.ShaderChunk.meshphong_frag
         .replace("#include <common>", "#include <common>\n" + paletteShaderLib.paletteColorParsFrag)
         .replace("#include <color_fragment>", "#include <color_fragment>\n" + paletteShaderLib.paletteColorFrag)
-        .replace("#include <lights_fragment_end>", "#include <lights_fragment_end>\n" + paletteShaderLib.paletteFullLightFragment),
+        .replace("#include <lights_fragment_end>", "#include <lights_fragment_end>\n" + paletteShaderLib.paletteFullLightFragment)
+        .replace("#include <colorspace_fragment>", paletteShaderLib.paletteOutputFrag + "\n#include <colorspace_fragment>"),
 };
 export class PalettePhongMaterial extends THREE.MeshPhongMaterial {
     public uniforms: {

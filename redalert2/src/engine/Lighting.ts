@@ -69,17 +69,19 @@ export class Lighting {
         tint.x = Math.max(0, tint.x);
         tint.y = Math.max(0, tint.y);
         tint.z = Math.max(0, tint.z);
-        const intensity = Math.max(0, this.mapLighting.ambient +
+        // Retail formula (CNCMaps Palette.ApplyLighting): ambient MINUS ground,
+        // plus level-per-height and lamp pools.
+        const intensity = Math.max(0, this.mapLighting.ambient -
             this.mapLighting.ground +
             this.computeLevel(type, tile.z + height) +
-            this.computeTileLightIntensity(tile));
+            this.computeTileLightIntensity(tile, type));
         return tint.multiplyScalar(intensity);
     }
     computeNoAmbient(type: LightingType, tile: any, height: number = 0): number {
-        return this.computeLevel(type, tile.z + height) + this.computeTileLightIntensity(tile);
+        return this.computeLevel(type, tile.z + height) + this.computeTileLightIntensity(tile, type);
     }
     computeLevel(type: LightingType, height: number): number {
-        return type >= LightingType.Level ? this.mapLighting.level * (height - 1) : 0;
+        return type >= LightingType.Level ? this.mapLighting.level * height : 0;
     }
     computeTint(type: LightingType): THREE.Vector3 {
         let red = 1, green = 1, blue = 1;
@@ -104,7 +106,12 @@ export class Lighting {
         }
         return result.set(red, green, blue);
     }
-    computeTileLightIntensity(tile: string): number {
+    computeTileLightIntensity(tile: string, type: LightingType = LightingType.Full): number {
+        // Lamp pools brighten only Ambient- and Full-lit objects in retail;
+        // Global/Level-lit art (projectiles, voxel anims, debris) ignores them.
+        if (type < LightingType.Ambient) {
+            return 0;
+        }
         let intensity = 0;
         const lights = this.tileLights.get(tile);
         if (lights?.size) {
@@ -115,7 +122,7 @@ export class Lighting {
         return intensity;
     }
     getAmbientIntensity(): number {
-        return this.mapLighting.ambient + this.mapLighting.ground;
+        return this.mapLighting.ambient - this.mapLighting.ground;
     }
     dispose() {
         this.disposables.dispose();

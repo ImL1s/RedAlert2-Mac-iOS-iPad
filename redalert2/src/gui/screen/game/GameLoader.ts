@@ -4,6 +4,7 @@ import { OperationCanceledError } from '@puzzl/core/lib/async/cancellation';
 import { ResourceType, theaterSpecificResources } from '@/engine/resourceConfigs';
 import { Engine } from '@/engine/Engine';
 import { TheaterType } from '@/engine/TheaterType';
+import { ObjectArt } from '@/game/art/ObjectArt';
 import { sleep } from '@/util/time';
 import { SideType } from '@/game/SideType';
 import { Coords } from '@/game/Coords';
@@ -245,6 +246,7 @@ export class GameLoader {
             .filter(isNotNullOrUndefined)
             .map(fileName => Engine.getIni(fileName));
         const theater = await Engine.loadTheater(mapFile.theaterType);
+        ObjectArt.inSnowTheater = mapFile.theaterType === TheaterType.Snow;
         const activeEngine = Engine.getActiveEngine();
         const theaterSettings = Engine.getTheaterSettings(activeEngine, mapFile.theaterType);
         const theaterIni = Engine.getTheaterIni(activeEngine, mapFile.theaterType);

@@ -170,7 +170,11 @@ export class Aircraft {
         this.extraLight = new THREE.Vector3().copy(this.baseExtraLight);
     }
     private updateBaseLight(): void {
-        this.baseExtraLight = new THREE.Vector3().setScalar(Math.PI * 1.5 + this.lighting.computeNoAmbient(this.objectArt.lightingType as any, this.gameObject.tile) + this.rules.audioVisual.extraAircraftLight);
+        // Voxel cell light (see paletteFullLightFragment): full per-tile
+        // multiplier; the shader applies retail's (0.8 + 1.3*dotNL) on top.
+        this.baseExtraLight = this.lighting
+            .compute(this.objectArt.lightingType as any, this.gameObject.tile)
+            .addScalar(this.rules.audioVisual.extraAircraftLight);
     }
     updateLighting(): void {
         this.plugins.forEach((plugin) => plugin.updateLighting?.());

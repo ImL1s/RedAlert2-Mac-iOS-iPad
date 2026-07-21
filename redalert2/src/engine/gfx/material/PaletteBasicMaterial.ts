@@ -29,7 +29,8 @@ const PaletteBasicShader = {
             paletteShaderLib.paletteColorFrag,
             paletteShaderLib.paletteBasicLightFragment,
             paletteShaderLib.vertexColorMultFrag,
-        ].join("\n")),
+        ].join("\n"))
+        .replace("#include <colorspace_fragment>", paletteShaderLib.paletteOutputFrag + "\n#include <colorspace_fragment>"),
 };
 export class PaletteBasicMaterial extends THREE.MeshBasicMaterial {
     uniforms: any;
