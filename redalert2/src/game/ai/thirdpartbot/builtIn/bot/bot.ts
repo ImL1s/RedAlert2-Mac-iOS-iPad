@@ -13,6 +13,7 @@ import { BaseBuildingMission } from "./logic/mission/missions/baseBuildingMissio
 import { SuperweaponOfficer } from "./logic/superweapons";
 import { AttackMission, AttackMissionState } from "./logic/mission/missions/attackMission";
 import { DefenceMission } from "./logic/mission/missions/defenceMission";
+import { rollMatchDoctrine } from "./strategy/doctrines";
 
 const DEBUG_STATE_UPDATE_INTERVAL_SECONDS = 6;
 
@@ -33,6 +34,7 @@ export class BuiltInBot extends Bot {
     private strategy: Strategy;
     private superweaponOfficer: SuperweaponOfficer | null = null;
     private lastRecallCheckAt = 0;
+    private lastRepairRotationAt = 0;
 
     // Messages to display in visualisation mode only.
     public _debugMessages: string[] = [];
@@ -59,23 +61,31 @@ export class BuiltInBot extends Bot {
         const botRate = botApm / 60;
         this.tickRatio = Math.ceil(gameRate / botRate);
 
-        // Roll a per-match personality with the shared game PRNG (never
-        // Math.random — bots run in lockstep on every client).
-        const personality = BOT_PERSONALITIES[game.generateRandomInt(0, BOT_PERSONALITIES.length - 1)];
-        const config = resolveBotConfig(this.profile, personality);
-        if (!this.strategyOverride) {
-            this.strategy = new DefaultStrategy(config);
-        }
-        this.queueController.setConfig(config);
-        this.superweaponOfficer = new SuperweaponOfficer(config);
-        this.logBotStatus(`Difficulty "${this.profile.id}", personality "${personality.id}"`);
-        console.log(`[BuiltInBot] "${this.name}" rolled personality "${personality.id}" (difficulty "${this.profile.id}")`);
-
         const myPlayer = game.getPlayerData(this.name);
 
         if (!myPlayer.country) {
             throw new Error(`Player ${this.name} has no country`);
         }
+
+        // Roll a per-match personality + doctrine with the shared game PRNG
+        // (never Math.random — bots run in lockstep on every client).
+        // Personality = tempo, doctrine = tools; jitter + opening book +
+        // trigger mask make every match play out differently.
+        const personality = BOT_PERSONALITIES[game.generateRandomInt(0, BOT_PERSONALITIES.length - 1)];
+        const config = resolveBotConfig(this.profile, personality);
+        config.matchDoctrine = rollMatchDoctrine(game, config.unitNameWeights, myPlayer.country.name);
+        if (!this.strategyOverride) {
+            this.strategy = new DefaultStrategy(config);
+        }
+        this.queueController.setConfig(config);
+        this.superweaponOfficer = new SuperweaponOfficer(config);
+        const doctrine = config.matchDoctrine;
+        this.logBotStatus(
+            `Difficulty "${this.profile.id}", personality "${personality.id}", doctrine "${doctrine.doctrine.id}", opening "${doctrine.opening.id}"`,
+        );
+        console.log(
+            `[BuiltInBot] "${this.name}" rolled personality "${personality.id}" doctrine "${doctrine.doctrine.id}" opening "${doctrine.opening.id}" (difficulty "${this.profile.id}", country ${myPlayer.country.name})`,
+        );
         this.missionController = new MissionController((message, sayInGame) => this.logBotStatus(message, sayInGame));
 
         // TODO: Strategy should have an onGameStart call which sets up the initial missions.
@@ -174,6 +184,7 @@ export class BuiltInBot extends Bot {
                     this.logBotStatus(message, sayInGame),
                 );
                 this.maybeRecallDefenders(fullContext);
+                this.maybeSendToRepair(fullContext);
             }
 
             const unitTypeRequests = this.missionController.getRequestedUnitTypes();
@@ -182,6 +193,39 @@ export class BuiltInBot extends Bot {
             this.queueController.onAiUpdate(fullContext, threatCache, unitTypeRequests, (message) =>
                 this.logBotStatus(message),
             );
+        }
+    }
+
+    /**
+     * Repair rotation: one badly damaged free vehicle at a time gets sent to
+     * the repair depot (also evicts terror-drone parasites — healing kills
+     * the drone). Sparse cadence, single dock.
+     */
+    private maybeSendToRepair(context: SupabotContext): void {
+        const { game } = context;
+        const currentTick = game.getCurrentTick();
+        if (currentTick < this.lastRepairRotationAt + 300) {
+            return;
+        }
+        this.lastRepairRotationAt = currentTick;
+        const depots = game.getVisibleUnits(this.name, "self", (r) => (r as any).unitRepair);
+        if (depots.length === 0) {
+            return;
+        }
+        const myPlayer = game.getPlayerData(this.name);
+        if (myPlayer.credits < 300) {
+            return;
+        }
+        const candidates = game.getVisibleUnits(this.name, "self", (r) => r.isSelectableCombatant);
+        for (const id of candidates) {
+            const unit = game.getUnitData(id);
+            if (!unit || !unit.maxHitPoints) {
+                continue;
+            }
+            if (unit.hitPoints / unit.maxHitPoints < 0.4 && (unit.rules as any).clickRepairable !== false) {
+                this.actionsApi.orderUnits([id], OrderType.Dock, depots[0]);
+                break;
+            }
         }
     }
 

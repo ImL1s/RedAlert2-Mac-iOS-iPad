@@ -145,7 +145,7 @@ export const BOT_PERSONALITIES: BotPersonality[] = [
         targetPreference: 'any',
         defensePriorityMultiplier: 1.2,
         techPriorityMultiplier: 1.5,
-        unitNameWeights: { APOC: 2, MGTK: 2, KIROV: 1.5, MIND: 2, CMIN: 1.3, HARV: 1.3 },
+        unitNameWeights: { APOC: 2, MGTK: 2, ZEP: 1.5, MIND: 2, CMIN: 1.3, HARV: 1.3 },
         aggressionThreatFactor: 1.15,
     },
     {
@@ -186,6 +186,8 @@ export const BOT_PERSONALITIES: BotPersonality[] = [
     },
 ];
 
+import type { MatchDoctrine } from "./bot/strategy/doctrines";
+
 /** Fully-resolved behavior config: difficulty profile x match personality. */
 export interface EffectiveBotConfig {
     apm: number;
@@ -204,6 +206,8 @@ export interface EffectiveBotConfig {
     techPriorityMultiplier: number;
     unitNameWeights: Record<string, number>;
     aggressionThreatFactor: number;
+    /** Rolled once per match in onGameStart: doctrine, jitter, opening, trigger mask. */
+    matchDoctrine?: MatchDoctrine;
 }
 
 export function resolveBotConfig(profile: BotProfile, personality: BotPersonality): EffectiveBotConfig {

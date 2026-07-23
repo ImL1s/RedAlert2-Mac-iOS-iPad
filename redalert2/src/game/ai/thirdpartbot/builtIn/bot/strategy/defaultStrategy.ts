@@ -4,6 +4,7 @@ import { ScoutingMissionFactory } from "../logic/mission/missions/scoutingMissio
 import { AttackMissionFactory } from "../logic/mission/missions/attackMission";
 import { DefenceMission, DefenceMissionFactory } from "../logic/mission/missions/defenceMission";
 import { EngineerMissionFactory } from "../logic/mission/missions/engineerMission";
+import { GarrisonMissionFactory } from "../logic/mission/missions/garrisonMission";
 import { SupabotContext } from "../logic/common/context";
 import { MissionController } from "../logic/mission/missionController";
 import { DebugLogger } from "../logic/common/utils";
@@ -215,9 +216,12 @@ export class DefaultStrategy implements Strategy {
     private attackFactory: AttackMissionFactory | null = null;
     private defenceFactory = new DefenceMissionFactory();
     private engineerFactory = new EngineerMissionFactory();
+    private garrisonFactory: GarrisonMissionFactory;
     private hadActiveDefence = false;
 
-    constructor(private config: EffectiveBotConfig = DEFAULT_CONFIG) {}
+    constructor(private config: EffectiveBotConfig = DEFAULT_CONFIG) {
+        this.garrisonFactory = new GarrisonMissionFactory(config);
+    }
 
     onAiUpdate(context: SupabotContext, missionController: MissionController, logger: DebugLogger) {
         if (!this.attackFactory) {
@@ -234,6 +238,7 @@ export class DefaultStrategy implements Strategy {
 
         this.defenceFactory.maybeCreateMissions(context, missionController, logger);
         this.engineerFactory.maybeCreateMissions(context, missionController, logger);
+        this.garrisonFactory.maybeCreateMissions(context, missionController, logger);
 
         // Counterattack: the moment a defence stands down (attackers wiped or
         // driven off), punch back while the enemy army is spent. Opportunists

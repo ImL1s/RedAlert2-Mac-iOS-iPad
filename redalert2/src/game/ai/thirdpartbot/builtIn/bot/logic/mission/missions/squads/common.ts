@@ -5,8 +5,18 @@ import { BatchableAction } from "../../actionBatcher";
 const NONCE_GI_DEPLOY = 0;
 const NONCE_GI_UNDEPLOY = 1;
 
-// Infantry that deploy to bring out their real weapon (GI, Guardian GI).
-const DEPLOY_TO_FIRE_INFANTRY = new Set(["E1", "GGI"]);
+// Infantry that deploy to bring out their real weapon (GI, Guardian GI,
+// Desolator's radiation field).
+const DEPLOY_TO_FIRE_INFANTRY = new Set(["E1", "GGI", "DESO"]);
+
+// Per-name micro roles: without these, specialists fight like line tanks and
+// look dumber than not building them at all.
+// Terror drones only hunt vehicles (their parasite is wasted on anything else).
+const VEHICLE_HUNTER_NAMES = new Set(["DRON"]);
+// Commandos: C4 erases buildings; their guns only threaten infantry.
+const COMMANDO_NAMES = new Set(["TANY", "GHOST"]);
+// Suicide units: worth spending only on structures and big game.
+const SUICIDE_NAMES = new Set(["DTRUCK", "TERROR"]);
 
 // Flying units churn (endless re-turning, never firing) when their orders are
 // re-issued every squad update; give their orders a cooldown window instead.
@@ -82,8 +92,28 @@ export function getAttackWeight(attacker: UnitData, target: UnitData, squadHasAi
 
     const distance = getDistanceBetweenPoints(new Vector2(x, y), new Vector2(hX, hY));
 
+    // Specialist role gates.
+    const targetIsBuilding = (target.type as any) === ObjectType.Building;
+    if (VEHICLE_HUNTER_NAMES.has(attacker.name) && (target.type as any) !== ObjectType.Vehicle) {
+        // Terror drones ignore everything that can't be infested.
+        return null;
+    }
+    if (COMMANDO_NAMES.has(attacker.name) && (target.type as any) === ObjectType.Vehicle) {
+        // Tanya/SEAL guns can't scratch vehicles; don't pick that fight.
+        return null;
+    }
+
     // Focus-fire shaping: each bonus point is worth ~1 tile of distance.
     let bonus = 0;
+    if (COMMANDO_NAMES.has(attacker.name) && targetIsBuilding) {
+        // C4 one-shots structures: commandos beeline for them.
+        bonus += 12;
+    }
+    if (SUICIDE_NAMES.has(attacker.name) && targetIsBuilding) {
+        // A demo truck traded for a war factory is a good trade; for a
+        // conscript it is not.
+        bonus += 8;
+    }
     // Finish wounded targets instead of spreading damage.
     if (target.maxHitPoints > 0) {
         bonus += (1 - target.hitPoints / target.maxHitPoints) * 8;

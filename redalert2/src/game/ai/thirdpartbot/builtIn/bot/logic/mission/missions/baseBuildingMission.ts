@@ -19,7 +19,16 @@ const TECH_STRUCTURE_NAMES = new Set([
     "GATECH", "NATECH", "YATECH",
     "GAAIRC", "AMRADR", "NARADR", "NAPSIS", "NACLON",
     "GAWEAT", "GACSPH", "NAMISL", "NAIRON", "YAPPET", "YAGNTC",
+    "GASPYSAT", "GAOREP", "GAGAP", "GAROBO",
 ]);
+
+// Production buildings that a cash-rich bot doubles down on (OpenRA's
+// "spend as fast as we earn" rule): parallel factories instead of a bank.
+const PRODUCTION_STRUCTURE_NAMES = new Set([
+    "GAWEAP", "NAWEAP", "YAWEAP",
+    "GAPILE", "NAHAND", "YABRCK",
+]);
+const CASH_RICH_THRESHOLD = 5000;
 
 // Legacy mission encompassing the old "build queue" logic.
 export class BaseBuildingMission extends Mission {
@@ -109,9 +118,18 @@ export class BaseBuildingMission extends Mission {
             // Personality flavor: turtles fortify and tech, rushers skip both.
             if (this.config && priority > 0) {
                 if (logic instanceof AntiGroundStaticDefence || logic instanceof AntiAirStaticDefence) {
-                    priority *= this.config.defensePriorityMultiplier;
+                    priority *= this.config.defensePriorityMultiplier * (this.config.matchDoctrine?.doctrine.defensePriorityMultiplier ?? 1);
                 } else if (TECH_STRUCTURE_NAMES.has(option.name)) {
-                    priority *= this.config.techPriorityMultiplier;
+                    priority *= this.config.techPriorityMultiplier * (this.config.matchDoctrine?.doctrine.techPriorityMultiplier ?? 1);
+                }
+                // Cash-rich: convert the bank into parallel production.
+                if (PRODUCTION_STRUCTURE_NAMES.has(option.name) && playerStatus.credits > CASH_RICH_THRESHOLD) {
+                    priority *= 2;
+                }
+                // Opening book shapes the first minutes of the match.
+                const doctrine = this.config.matchDoctrine;
+                if (doctrine && game.getCurrentTick() < doctrine.openingUntilTick) {
+                    priority *= doctrine.openingMultipliers[option.name] ?? 1;
                 }
             }
             return priority;

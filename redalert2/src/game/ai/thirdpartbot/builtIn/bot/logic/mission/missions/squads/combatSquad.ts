@@ -51,6 +51,15 @@ enum SquadState {
 /** Reason string surfaced when a squad breaks off a losing fight. */
 export const SQUAD_REPELLED = "Repelled";
 
+/** Generals-style approach lanes: straight in, side arc, or deep flank. */
+export type AttackLane = "center" | "flank" | "backdoor";
+
+const LANE_OFFSETS: Record<AttackLane, number[]> = {
+    center: [-8, 0, 8],
+    flank: [-20, -12, 12, 20],
+    backdoor: [-40, -28, 28, 40],
+};
+
 export class CombatSquad implements Squad {
     private lastCommand: number | null = null;
     private state = SquadState.Gathering;
@@ -78,6 +87,7 @@ export class CombatSquad implements Squad {
         private targetArea: Vector2,
         private radius: number,
         private canRetreat: boolean = false,
+        private lane: AttackLane = "center",
     ) {}
 
     public getGlobalDebugText(): string | undefined {
@@ -380,7 +390,9 @@ export class CombatSquad implements Squad {
         };
 
         let best: { point: Vector2 | null; score: number } = { point: null, score: Number.POSITIVE_INFINITY };
-        for (const offset of [-16, -8, 0, 8, 16]) {
+        // The mission's lane decides how wide the approach arcs: center goes
+        // straight, flank swings the sides, backdoor loops deep around.
+        for (const offset of LANE_OFFSETS[this.lane]) {
             const candidate =
                 offset === 0
                     ? null
@@ -390,8 +402,10 @@ export class CombatSquad implements Squad {
             }
             const via = candidate ?? mid;
             const threat = (legThreat(from, via) ?? 0) + (legThreat(via, to) ?? 0);
+            // Wide lanes accept longer detours (the point IS the detour).
+            const lengthPenalty = this.lane === "center" ? 0.5 : 0.15;
             const extraLength = from.distanceTo(via) + via.distanceTo(to) - direct;
-            const score = threat + 0.5 * extraLength;
+            const score = threat + lengthPenalty * extraLength;
             if (score < best.score) {
                 best = { point: candidate, score };
             }

@@ -11,6 +11,8 @@ import { UnitComposition } from "../../../strategy/strategy";
 import { SideComposition } from "../../../strategy/compositionUtils";
 import { AiTriggerDatabase, AiTriggerEntry, TargetIntent } from "../../ai-ini/aiTriggerDb";
 import { EffectiveBotConfig, TargetPreference } from "../../../../botProfiles";
+import { isTriggerMasked } from "../../../strategy/doctrines";
+import type { AttackLane } from "./squads/combatSquad";
 
 export enum AttackFailReason {
     NoTargets = "NoTargets",
@@ -69,10 +71,20 @@ export class AttackMission extends Mission<AttackFailReason> {
         private launchTimeoutTicks: number = 1350,
         // The team's retail-script hunting preference (harvesters, factories...).
         private targetIntent: TargetIntent = null,
+        // Approach lane (Generals-style Center/Flank/Backdoor pathing).
+        lane: AttackLane = "center",
+        // Called once, on the Preparing -> Attacking transition.
+        private onLaunch?: () => void,
     ) {
         super(uniqueName, logger);
-        this.squad = new CombatSquad(rallyArea, attackArea, radius, true);
+        this.squad = new CombatSquad(rallyArea, attackArea, radius, true, lane);
         this.requestedUnitCount = composition.maximumUnits;
+    }
+
+    private launch(): void {
+        this.priority = ATTACK_MISSION_INITIAL_PRIORITY;
+        this.state = AttackMissionState.Attacking;
+        this.onLaunch?.();
     }
 
     _onAiUpdate(context: MissionContext): MissionAction {
@@ -100,8 +112,7 @@ export class AttackMission extends Mission<AttackFailReason> {
         if (timedOut) {
             if (currentUnits >= partialLaunchFloor) {
                 this.logger(`Attack ${this.getUniqueName()} launching after timeout with ${currentUnits} units.`);
-                this.priority = ATTACK_MISSION_INITIAL_PRIORITY;
-                this.state = AttackMissionState.Attacking;
+                this.launch();
                 return noop();
             }
             return disbandMission(AttackFailReason.UnableToAcquireUnits);
@@ -111,8 +122,7 @@ export class AttackMission extends Mission<AttackFailReason> {
         if (this.requestedUnitCount < this.composition.minimumUnits) {
             if (currentUnits >= partialLaunchFloor) {
                 this.logger(`Attack ${this.getUniqueName()} launching with partial squad (${currentUnits}).`);
-                this.priority = ATTACK_MISSION_INITIAL_PRIORITY;
-                this.state = AttackMissionState.Attacking;
+                this.launch();
                 return noop();
             }
             return disbandMission(AttackFailReason.UnableToAcquireUnits);
@@ -132,8 +142,7 @@ export class AttackMission extends Mission<AttackFailReason> {
             );
             return requestUnits(unitPriorities);
         } else {
-            this.priority = ATTACK_MISSION_INITIAL_PRIORITY;
-            this.state = AttackMissionState.Attacking;
+            this.launch();
             return noop();
         }
     }
@@ -304,15 +313,23 @@ function generateTarget(
     includeBaseLocations: boolean = false,
     targetPreference: TargetPreference = "any",
     targetIntent: TargetIntent = null,
+    focusEnemyName: string | null = null,
 ): Vector2 | null {
     // Randomly decide between harvester and base.
     try {
         const harvesterBias = targetPreference === "harvester" ? 3 : 1;
         const tryFocusHarvester = gameApi.generateRandomInt(0, 1 + harvesterBias) > 1 - harvesterBias;
-        const enemyUnits = gameApi
+        let enemyUnits = gameApi
             .getVisibleUnits(playerData.name, "enemy")
             .map((unitId) => gameApi.getUnitData(unitId))
             .filter((u) => !!u && gameApi.getPlayerData(u.owner).isCombatant) as UnitData[];
+        // FFA: concentrate on the focus enemy when we can see them.
+        if (focusEnemyName) {
+            const focused = enemyUnits.filter((u) => u.owner === focusEnemyName);
+            if (focused.length > 0) {
+                enemyUnits = focused;
+            }
+        }
 
         const weighted = (u: UnitData) => {
             let weight = getTargetWeight(u, tryFocusHarvester);
@@ -377,6 +394,17 @@ export class AttackMissionFactory {
     private readonly launchTimeoutTicks: number;
     private readonly targetPreference: TargetPreference;
     private lastAttackAt: number;
+    // Generals-style cadence: the cooldown gates LAUNCHES, not assembly — a
+    // new team starts building the moment the previous one ships, so there is
+    // never a quiet period.
+    private lastLaunchAt: number;
+    // Escalation ladder: increments per launched attack; caps team cost early
+    // so openings are probes and the late game is combined-arms deathballs.
+    private waveIndex: number;
+    private readonly maxWaveIndex: number;
+    // FFA focus: which enemy this bot is currently hunting.
+    private focusEnemyName: string | null = null;
+    private lastFocusPickAt = -100000;
     // While open (after repelling an enemy attack), cooldowns are waived and
     // one extra squad may assemble: hit them while they're weak.
     private counterattackUntilTick = 0;
@@ -393,6 +421,67 @@ export class AttackMissionFactory {
         this.launchTimeoutTicks = config?.attackLaunchTimeoutTicks ?? 1350;
         this.targetPreference = config?.targetPreference ?? "any";
         this.lastAttackAt = -this.visibleTargetCooldownTicks;
+        this.lastLaunchAt = -this.visibleTargetCooldownTicks;
+        // Brutal starts a wave up and escalates without limit; easy never
+        // leaves the probe waves.
+        const difficulty = config?.difficultyId ?? "normal";
+        this.waveIndex = difficulty === "brutal" ? 1 : 0;
+        this.maxWaveIndex = difficulty === "easy" ? 2 : difficulty === "normal" ? 4 : 99;
+    }
+
+    /** Wave ladder cost ceiling for the current escalation index. */
+    private waveCostCeiling(): number {
+        const wave = Math.min(this.waveIndex, this.maxWaveIndex);
+        if (wave <= 1) return 2500;
+        if (wave <= 3) return 6000;
+        return Number.POSITIVE_INFINITY;
+    }
+
+    /** Personality-flavored approach lane roll. */
+    private rollLane(game: GameApi): AttackLane {
+        const sneaky = this.config?.personalityId === "harasser" || this.config?.personalityId === "opportunist";
+        const roll = game.generateRandomInt(0, 99);
+        if (sneaky) {
+            return roll < 25 ? "center" : roll < 65 ? "flank" : "backdoor";
+        }
+        return roll < 50 ? "center" : roll < 80 ? "flank" : "backdoor";
+    }
+
+    /** FFA focus: pick which enemy to hunt, re-evaluated every 2 minutes. */
+    private updateFocusEnemy(game: GameApi, playerData: PlayerData): void {
+        if (game.getCurrentTick() < this.lastFocusPickAt + 1800) {
+            return;
+        }
+        this.lastFocusPickAt = game.getCurrentTick();
+        const enemies = game
+            .getPlayers()
+            .filter((name) => name !== playerData.name && !game.areAlliedPlayers(playerData.name, name))
+            .map((name) => game.getPlayerData(name))
+            .filter((p) => p.isCombatant);
+        if (enemies.length <= 1) {
+            this.focusEnemyName = enemies[0]?.name ?? null;
+            return;
+        }
+        const aggressive = this.config?.personalityId === "rusher" || this.config?.personalityId === "harasser";
+        let best = enemies[0];
+        let bestScore = Number.POSITIVE_INFINITY;
+        for (const enemy of enemies) {
+            let score: number;
+            if (aggressive) {
+                // Nearest neighbor gets the attention.
+                const dx = enemy.startLocation.x - playerData.startLocation.x;
+                const dy = enemy.startLocation.y - playerData.startLocation.y;
+                score = dx * dx + dy * dy;
+            } else {
+                // Pile onto the weakest.
+                score = game.getVisibleUnits(enemy.name, "self").length;
+            }
+            if (score < bestScore) {
+                bestScore = score;
+                best = enemy;
+            }
+        }
+        this.focusEnemyName = best.name;
     }
 
     getName(): string {
@@ -440,8 +529,28 @@ export class AttackMissionFactory {
                       ? "hard"
                       : "medium";
             const buildable = new Set(context.player.production.getAvailableObjects().map((o) => o.name));
-            const pool = this.triggerDb.getEligibleAttackTriggers(game, playerData, difficulty, buildable);
-            const picked = this.triggerDb.pickWeighted(game, pool, (entry) => this.costBias(entry));
+            let pool = this.triggerDb.getEligibleAttackTriggers(game, playerData, difficulty, buildable);
+            // Per-match trigger mask: a quarter of the deck sits out each
+            // game, so the attack-team sequence differs match to match.
+            const maskRoll = this.config?.matchDoctrine?.maskedTriggerRoll;
+            if (maskRoll !== undefined) {
+                const unmasked = pool.filter((entry) => !isTriggerMasked(entry.index, maskRoll));
+                if (unmasked.length > 0) {
+                    pool = unmasked;
+                }
+            }
+            // Wave ladder: early waves send probes, later waves heavy teams.
+            const ceiling = this.waveCostCeiling();
+            const inWave = pool.filter((entry) => entry.totalCost <= ceiling);
+            if (inWave.length > 0) {
+                pool = inWave;
+            }
+            const heavyBias = this.config?.matchDoctrine?.doctrine.heavyTeamBias ?? 1;
+            const picked = this.triggerDb.pickWeighted(
+                game,
+                pool,
+                (entry) => this.costBias(entry) * (entry.totalCost > 5000 ? heavyBias : 1),
+            );
             if (picked) {
                 const totalUnits = picked.taskForce.totalUnits;
                 const composition: SideComposition = {
@@ -475,9 +584,12 @@ export class AttackMissionFactory {
         if (game.getCurrentTick() < this.firstAttackAllowedTick) {
             return;
         }
-        if (!counterattacking && game.getCurrentTick() < this.lastAttackAt + this.visibleTargetCooldownTicks) {
+        // Cooldown counts from the previous LAUNCH: assembly happens during
+        // the cooldown, so the next wave ships the moment it expires.
+        if (!counterattacking && game.getCurrentTick() < this.lastLaunchAt + this.visibleTargetCooldownTicks) {
             return;
         }
+        this.updateFocusEnemy(game, playerData);
 
         // Cap concurrent assembling attacks (personality-driven multi-prong).
         const preparingCount = missionController
@@ -508,6 +620,7 @@ export class AttackMissionFactory {
             includeEnemyBases,
             this.targetPreference,
             intent,
+            this.focusEnemyName,
         );
 
         if (!attackArea) {
@@ -515,6 +628,7 @@ export class AttackMissionFactory {
         }
 
         const squadName = "attack_" + game.getCurrentTick();
+        const lane = this.rollLane(game);
 
         const triggerDb = this.triggerDb;
         const tryAttack = missionController.addMission(
@@ -528,6 +642,11 @@ export class AttackMissionFactory {
                 logger,
                 this.launchTimeoutTicks,
                 intent,
+                lane,
+                () => {
+                    this.lastLaunchAt = game.getCurrentTick();
+                    this.waveIndex++;
+                },
             ).withOnFinish((unitIds, reason) => {
                 logger(
                     `Attack ${squadName} (${JSON.stringify(composition)}) with ${

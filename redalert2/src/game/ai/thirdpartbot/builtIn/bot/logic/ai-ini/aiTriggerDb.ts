@@ -108,6 +108,8 @@ export interface AiTriggerEntry {
     targetIntent: TargetIntent;
     /** attack / guard / expand — only attack teams join the offensive pool. */
     role: TeamRole;
+    /** Stable parse-order index (used for the per-match trigger mask). */
+    index: number;
 }
 
 /** Retail [General] deltas (rulesmd): success/failure feedback on weights. */
@@ -364,6 +366,7 @@ export class AiTriggerDatabase {
                     currentWeight: trigger.startWeight,
                     targetIntent: meta.intent,
                     role: meta.role,
+                    index: this.entries.length,
                 });
             }
         }

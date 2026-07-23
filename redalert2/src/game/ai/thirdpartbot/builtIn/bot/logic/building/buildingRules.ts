@@ -200,8 +200,13 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
 
     ["GAPILL", new AntiGroundStaticDefence(2, 1, 7.5, 5)], // Pillbox
     ["ATESLA", new AntiGroundStaticDefence(2, 1, 10, 3)], // Prism Cannon
+    ["GTGCAN", new AntiGroundStaticDefence(2, 1, 10, 3)], // Grand Cannon (France)
     ["NASAM", new AntiAirStaticDefence(1, 1, 7.5)], // Patriot Missile
     ["GAWALL", new AntiGroundStaticDefence(0, 0, 0, 0)], // Walls
+    ["GAROBO", new BasicBuilding(4, 2, 1500)], // Robot Control Center (powers ROBO; keep a spare)
+    ["GASPYSAT", new BasicBuilding(4, 1, 2500)], // Spy Satellite (map reveal)
+    ["GAOREP", new BasicBuilding(8, 1, 4000)], // Ore Purifier
+    ["GAGAP", new BasicBuilding(2, 1, 4000)], // Gap Generator
 
     ["E1", new BasicGroundUnit(2, 2, 0.2, 0)], // GI
     ["ENGINEER", new BasicGroundUnit(1, 0, 0)], // Engineer
@@ -209,8 +214,17 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["MGTK", new BasicGroundUnit(10, 1, 2.5, 0)], // Mirage Tank
     ["FV", new BasicGroundUnit(5, 2, 0.5, 1)], // IFV
     ["JUMPJET", new BasicAirUnit(10, 1, 1, 1)], // Rocketeer
-    ["ORCA", new BasicAirUnit(7, 1, 2, 0)], // Rocketeer
+    ["ORCA", new BasicAirUnit(7, 1, 2, 0)], // Harrier
+    ["BEAG", new BasicAirUnit(7, 1, 2, 0)], // Black Eagle (Korea's Harrier — ORCA is forbidden to them)
     ["SREF", new ArtilleryUnit(10, 5, 3, 3)], // Prism Tank
+    ["GGI", new BasicGroundUnit(6, 2, 0.6, 1.5)], // Guardian GI (deploy AA/AT)
+    ["SNIPE", new BasicGroundUnit(3, 1, 0.8, 0)], // Sniper (Britain)
+    ["TNKD", new BasicGroundUnit(7, 2, 2.5, 0)], // Tank Destroyer (Germany)
+    ["ROBO", new BasicGroundUnit(6, 2, 1.5, 0)], // Robot Tank (mind-control immune)
+    ["BFRT", new BasicGroundUnit(5, 1, 4, 0)], // Battle Fortress
+    ["GHOST", new BasicGroundUnit(2, 1, 1, 0)], // Navy SEAL
+    ["TANY", new BasicGroundUnit(2, 1, 1.5, 0)], // Tanya
+    ["ADOG", new BasicGroundUnit(1, 1, 0, 0)], // Allied Attack Dog
     ["CLEG", new BasicGroundUnit(0, 0)], // Chrono Legionnaire (Disabled - we don't handle the warped out phase properly and it tends to bug both bots out)
     ["SHAD", new BasicGroundUnit(0, 0)], // Nighthawk (Disabled)
 
@@ -244,6 +258,15 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["HTK", new BasicGroundUnit(5, 2, 0.33, 1.5)], // Flak Track
     ["ZEP", new BasicAirUnit(5, 1, 5, 1)], // Kirov
     ["V3", new ArtilleryUnit(9, 10, 0, 3)], // V3 Rocket Launcher
+    ["SHK", new BasicGroundUnit(4, 2, 1, 0)], // Tesla Trooper
+    ["DRON", new BasicGroundUnit(4, 2, 1, 0)], // Terror Drone (parasite)
+    ["SCHP", new BasicGroundUnit(6, 2, 2, 0)], // Siege Chopper
+    ["DESO", new BasicGroundUnit(6, 2, 2, 0)], // Desolator (Iraq)
+    ["TTNK", new BasicGroundUnit(7, 2, 2.5, 0)], // Tesla Tank (Russia)
+    ["BORIS", new BasicGroundUnit(3, 1, 2.5, 0)], // Boris (airstrikes)
+    ["TERROR", new BasicGroundUnit(3, 2, 1, 0)], // Terrorist (Cuba)
+    ["IVAN", new BasicGroundUnit(2, 1, 1, 0)], // Crazy Ivan
+    ["DTRUCK", new BasicGroundUnit(3, 1, 3, 0)], // Demolition Truck (Libya)
 
     // Yuri
     ["YAPOWR", new PowerPlant()], // Bio Reactor
@@ -273,5 +296,7 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["MIND", new BasicGroundUnit(4, 1, 2, 0)], // Master Mind
     ["DISK", new BasicAirUnit(5, 1, 3, 1)], // Floating Disc
     ["TELE", new BasicGroundUnit(3, 1, 2, 0)], // Magnetron (suspends vehicles)
-    ["CAOS", new BasicGroundUnit(0, 0)], // Chaos Drone (disabled)
+    ["VIRUS", new BasicGroundUnit(4, 2, 1, 0)], // Virus (long-range sniper)
+    ["YURIPR", new BasicGroundUnit(3, 1, 2, 0)], // Yuri Prime
+    ["CAOS", new BasicGroundUnit(3, 1, 1.5, 0)], // Chaos Drone (BerserkTrait implemented + verified)
 ]);

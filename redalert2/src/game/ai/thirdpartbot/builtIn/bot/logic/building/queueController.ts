@@ -1,6 +1,8 @@
 import {
     ActionsApi,
     GameApi,
+    MovementZone,
+    ObjectType,
     PlayerData,
     ProductionApi,
     QueueStatus,
@@ -62,16 +64,75 @@ const PLACEMENT_FAILURE_CANCEL_THRESHOLD = 10;
 // Unit queues that background production keeps busy.
 const BACKGROUND_PRODUCTION_QUEUES = [QueueType.Infantry, QueueType.Vehicles, QueueType.Aircrafts];
 
+// Counter-composition: when the enemy census skews air/armor/infantry, these
+// names get a production boost (side-agnostic sets; unavailable names are
+// simply never candidates).
+const AA_CAPABLE_NAMES = new Set(["GGI", "NASAM", "JUMPJET", "FV", "HTK", "FLAKT", "YTNK", "GATT"]);
+const ANTI_ARMOR_NAMES = new Set(["TNKD", "MGTK", "APOC", "DRON", "TTNK", "SHK", "BRUTE", "TELE", "SREF", "V3"]);
+const ANTI_INFANTRY_NAMES = new Set(["DESO", "VIRUS", "SNIPE", "MTNK", "HTNK", "LTNK", "SCHP", "GHOST"]);
+const CENSUS_INTERVAL_TICKS = 450;
+
 export class QueueController {
     private queueStates: QueueState[] = [];
     private lastRepairCheckAt = 0;
     private placementFailures: Map<string, number> = new Map();
     private config?: EffectiveBotConfig;
+    private lastCensusAt = -CENSUS_INTERVAL_TICKS;
+    private counterMultipliers: { aa: number; antiArmor: number; antiInfantry: number } = {
+        aa: 1,
+        antiArmor: 1,
+        antiInfantry: 1,
+    };
 
     constructor() {}
 
     public setConfig(config: EffectiveBotConfig): void {
         this.config = config;
+    }
+
+    /**
+     * Counter-composition: census the visible enemy army and shift background
+     * production toward its counters. This is what makes a rematch diverge —
+     * the bot answers what YOU are doing.
+     */
+    private updateEnemyCensus(context: SupabotContext): void {
+        const { game, player } = context;
+        const currentTick = game.getCurrentTick();
+        if (currentTick < this.lastCensusAt + CENSUS_INTERVAL_TICKS) {
+            return;
+        }
+        this.lastCensusAt = currentTick;
+        let air = 0;
+        let armor = 0;
+        let infantry = 0;
+        let total = 0;
+        for (const id of game.getVisibleUnits(player.name, "enemy")) {
+            const data = game.getGameObjectData(id);
+            const rules: any = data?.rules;
+            if (!rules?.isSelectableCombatant) {
+                continue;
+            }
+            total++;
+            if (rules.movementZone === MovementZone.Fly) {
+                air++;
+            } else if ((data!.type as any) === ObjectType.Vehicle) {
+                armor++;
+            } else if ((data!.type as any) === ObjectType.Infantry) {
+                infantry++;
+            }
+        }
+        if (total < 5) {
+            this.counterMultipliers = { aa: 1, antiArmor: 1, antiInfantry: 1 };
+            return;
+        }
+        const airFrac = air / total;
+        const armorFrac = armor / total;
+        const infFrac = infantry / total;
+        this.counterMultipliers = {
+            aa: Math.min(2.5, 1 + airFrac * 3),
+            antiArmor: Math.min(2, 1 + armorFrac * 1.2),
+            antiInfantry: Math.min(2, 1 + infFrac * 1.2),
+        };
     }
 
     public onAiUpdate(
@@ -155,7 +216,18 @@ export class QueueController {
         if (playerData.credits <= reserve) {
             return;
         }
-        const nameWeights = this.config?.unitNameWeights ?? {};
+        this.updateEnemyCensus(context);
+        // Doctrine-merged weights (personality x doctrine x country x jitter)
+        // when rolled; raw personality weights otherwise.
+        const nameWeights = this.config?.matchDoctrine?.mergedUnitWeights ?? this.config?.unitNameWeights ?? {};
+        const counters = this.counterMultipliers;
+        const counterWeight = (name: string): number => {
+            let multiplier = 1;
+            if (AA_CAPABLE_NAMES.has(name)) multiplier *= counters.aa;
+            if (ANTI_ARMOR_NAMES.has(name)) multiplier *= counters.antiArmor;
+            if (ANTI_INFANTRY_NAMES.has(name)) multiplier *= counters.antiInfantry;
+            return multiplier;
+        };
 
         for (const queueType of BACKGROUND_PRODUCTION_QUEUES) {
             const queueData = productionApi.getQueueData(queueType);
@@ -185,7 +257,8 @@ export class QueueController {
                     continue;
                 }
                 if (rules instanceof BasicGroundUnit || rules instanceof BasicAirUnit) {
-                    const weight = rules.getBackgroundWeight() * (nameWeights[option.name] ?? 1);
+                    const weight =
+                        rules.getBackgroundWeight() * (nameWeights[option.name] ?? 1) * counterWeight(option.name);
                     if (weight > 0) {
                         candidates.push({ unit: option, weight });
                     }
