@@ -14,11 +14,51 @@ const SW_CHECK_INTERVAL_TICKS = 75;
 const CLUSTER_CELL_TILES = 8;
 
 // Ready-to-fire delay by difficulty (deliberation time, in ticks).
+// Retail fires on ready at every difficulty (RA1 Super_Weapon_Handler checks
+// Is_Ready every frame; RA2's [IQ] keeps SW autofire on for all AIs) — the
+// easy delay is our own mercy rule, kept deliberately.
 const FIRE_DELAY_BY_DIFFICULTY: Record<string, number> = {
     easy: 1350,
-    normal: 450,
+    normal: 0,
     brutal: 0,
 };
+
+// Retail AISuperDefenseProbability=90,50,10: chance to answer an enemy
+// superweapon launch with Force Shield, by difficulty.
+const FORCE_SHIELD_PROBABILITY: Record<string, number> = {
+    easy: 10,
+    normal: 50,
+    brutal: 90,
+};
+
+// Enemy superweapons worth shielding against (nuke, storm, dominator).
+const MAJOR_OFFENSIVE_SW = new Set<number>([
+    SuperWeaponType.MultiMissile,
+    SuperWeaponType.LightningStorm,
+    SuperWeaponType.PsychicDominator,
+]);
+
+// Retail AIIonCannon*Value building-category weights for offensive SW
+// placement (rulesmd [General], TS Ion Cannon lineage): production and tech
+// structures are the prize, defenses are not.
+function retailCategoryWeight(rules: any, isBuilding: boolean, difficultyId: string): number {
+    if (!isBuilding) {
+        return 0; // mobile units fall back to cost-based scoring
+    }
+    if (rules.constructionYard) {
+        return 100;
+    }
+    if (rules.factory !== undefined && rules.factory !== 0) {
+        return 100;
+    }
+    if ((rules.power ?? 0) > 0) {
+        return difficultyId === "brutal" ? 60 : 100;
+    }
+    if (rules.isBaseDefense) {
+        return 35;
+    }
+    return 50;
+}
 
 interface Cluster {
     score: number;
@@ -38,6 +78,8 @@ export class SuperweaponOfficer {
     private lastCheckAt = 0;
     /** SW type -> tick we first saw it Ready (for the deliberation delay). */
     private readySince = new Map<number, number>();
+    /** Enemy major superweapons currently Ready ("player:type"), to detect launches. */
+    private enemyReadySw = new Set<string>();
 
     constructor(private config: EffectiveBotConfig) {}
 
@@ -55,6 +97,11 @@ export class SuperweaponOfficer {
         } catch (err) {
             return;
         }
+        // Anti-superweapon watch (retail AISuperDefenseProbability): when an
+        // enemy nuke/storm/dominator LAUNCHES (Ready -> not Ready), roll to
+        // answer with Force Shield on our densest base cluster.
+        this.watchEnemyLaunches(context, allSw, logger);
+
         const mySw = allSw.filter((sw) => sw.playerName === player.name);
         if (mySw.length === 0) {
             this.readySince.clear();
@@ -132,11 +179,18 @@ export class SuperweaponOfficer {
                 return true;
             }
             case SuperWeaponType.ForceShield: {
-                // Defensive: only when the base is actually under attack.
+                // Primary use is answering enemy superweapon launches (see
+                // watchEnemyLaunches). Fallback: base under heavy attack, but
+                // gated by the same retail probability so easy bots rarely
+                // burn it on a tank poke.
                 const underAttack = missionController
                     .getMissions()
                     .some((m) => m instanceof DefenceMission && m.getPriority() > 0);
                 if (!underAttack) {
+                    return false;
+                }
+                const probability = FORCE_SHIELD_PROBABILITY[this.config.difficultyId] ?? 50;
+                if (game.generateRandomInt(0, 99) >= probability) {
                     return false;
                 }
                 const conyard = game
@@ -201,6 +255,102 @@ export class SuperweaponOfficer {
         }
     }
 
+    /**
+     * Detect enemy major-SW launches (Ready -> gone) and roll the retail
+     * AISuperDefenseProbability {brutal 90 / normal 50 / easy 10} to raise
+     * Force Shield over our densest base cluster. The launch target isn't
+     * exposed to bots, so shielding our highest-value cluster is the honest
+     * approximation.
+     */
+    private watchEnemyLaunches(
+        context: SupabotContext,
+        allSw: { playerName: string; type: any; status: any }[],
+        logger: DebugLogger,
+    ): void {
+        const { game, player } = context;
+        const currentReady = new Set<string>();
+        for (const sw of allSw) {
+            const type = Number(sw.type);
+            if (sw.playerName === player.name || !MAJOR_OFFENSIVE_SW.has(type)) {
+                continue;
+            }
+            if (game.areAlliedPlayers(player.name, sw.playerName)) {
+                continue;
+            }
+            if (Number(sw.status) === SuperWeaponStatus.Ready) {
+                currentReady.add(`${sw.playerName}:${type}`);
+            }
+        }
+        let launchDetected = false;
+        for (const key of this.enemyReadySw) {
+            if (!currentReady.has(key)) {
+                launchDetected = true;
+                break;
+            }
+        }
+        this.enemyReadySw = currentReady;
+        if (!launchDetected) {
+            return;
+        }
+
+        const shield = allSw.find(
+            (sw) =>
+                sw.playerName === player.name &&
+                Number(sw.type) === SuperWeaponType.ForceShield &&
+                Number(sw.status) === SuperWeaponStatus.Ready,
+        );
+        if (!shield) {
+            return;
+        }
+        const probability = FORCE_SHIELD_PROBABILITY[this.config.difficultyId] ?? 50;
+        if (game.generateRandomInt(0, 99) >= probability) {
+            logger(`Enemy superweapon launch detected — force shield held (roll failed).`);
+            return;
+        }
+        const cluster = this.bestOwnBuildingCluster(game, player.name);
+        if (!cluster) {
+            return;
+        }
+        logger(`Enemy superweapon launch detected — raising force shield at (${cluster.x},${cluster.y})!`);
+        player.actions.activateSuperWeapon(SuperWeaponType.ForceShield, { rx: cluster.x, ry: cluster.y });
+        this.readySince.delete(SuperWeaponType.ForceShield);
+    }
+
+    /** Our densest building cluster by value (what the enemy would nuke). */
+    private bestOwnBuildingCluster(game: GameApi, playerName: string): Cluster | null {
+        const buckets = new Map<number, Cluster>();
+        for (const id of game.getVisibleUnits(playerName, "self", (r) => true)) {
+            const unit = game.getUnitData(id);
+            if (!unit || (unit.type as any) !== ObjectType.Building) {
+                continue;
+            }
+            const cx = Math.floor(unit.tile.rx / CLUSTER_CELL_TILES);
+            const cy = Math.floor(unit.tile.ry / CLUSTER_CELL_TILES);
+            const key = cx * 10000 + cy;
+            let bucket = buckets.get(key);
+            if (!bucket) {
+                bucket = { score: 0, x: 0, y: 0, count: 0, infantry: 0 };
+                buckets.set(key, bucket);
+            }
+            bucket.score += ((unit.rules as any).cost ?? unit.maxHitPoints);
+            bucket.x += unit.tile.rx;
+            bucket.y += unit.tile.ry;
+            bucket.count++;
+        }
+        let best: Cluster | null = null;
+        const keys = [...buckets.keys()].sort((a, b) => a - b);
+        for (const key of keys) {
+            const bucket = buckets.get(key)!;
+            if (!best || bucket.score > best.score) {
+                best = bucket;
+            }
+        }
+        if (!best || best.count === 0) {
+            return null;
+        }
+        return { ...best, x: Math.round(best.x / best.count), y: Math.round(best.y / best.count) };
+    }
+
     /** Densest enemy cluster by unit value; infantryOnly counts infantry bodies. */
     private bestEnemyCluster(game: GameApi, playerName: string, infantryOnly: boolean): Cluster | null {
         const enemyIds = game.getVisibleUnits(playerName, "enemy");
@@ -223,7 +373,15 @@ export class SuperweaponOfficer {
                 buckets.set(key, bucket);
             }
             const rules: any = unit.rules;
-            const value = infantryOnly ? 100 : (rules.cost ?? unit.maxHitPoints) * ((unit.type as any) === ObjectType.Building ? 1.5 : 1);
+            const isBuilding = (unit.type as any) === ObjectType.Building;
+            // Retail category table dominates for structures; mobile blobs
+            // still count by cost so an army with no visible base is a target.
+            const categoryWeight = retailCategoryWeight(rules, isBuilding, this.config.difficultyId);
+            const value = infantryOnly
+                ? 100
+                : isBuilding
+                  ? (rules.cost ?? unit.maxHitPoints) * (categoryWeight / 50)
+                  : (rules.cost ?? unit.maxHitPoints);
             bucket.score += value;
             bucket.x += unit.tile.rx;
             bucket.y += unit.tile.ry;

@@ -35,6 +35,8 @@ export class BuiltInBot extends Bot {
     private superweaponOfficer: SuperweaponOfficer | null = null;
     private lastRecallCheckAt = 0;
     private lastRepairRotationAt = 0;
+    private lastFireSaleCheckAt = 0;
+    private fireSaleDone = false;
 
     // Messages to display in visualisation mode only.
     public _debugMessages: string[] = [];
@@ -185,6 +187,7 @@ export class BuiltInBot extends Bot {
                 );
                 this.maybeRecallDefenders(fullContext);
                 this.maybeSendToRepair(fullContext);
+                this.maybeFireSale(fullContext);
             }
 
             const unitTypeRequests = this.missionController.getRequestedUnitTypes();
@@ -192,6 +195,73 @@ export class BuiltInBot extends Bot {
             // Queue-controller logic.
             this.queueController.onAiUpdate(fullContext, threatCache, unitTypeRequests, (message) =>
                 this.logBotStatus(message),
+            );
+        }
+    }
+
+    /**
+     * The RA1 endgame: with no production left but buildings still standing,
+     * sell EVERYTHING and send every unit on a final all-in — the iconic
+     * "fire sale" banzai instead of a slow, passive death.
+     */
+    private maybeFireSale(context: SupabotContext): void {
+        if (this.fireSaleDone) {
+            return;
+        }
+        const { game } = context;
+        const currentTick = game.getCurrentTick();
+        if (currentTick < this.lastFireSaleCheckAt + 300) {
+            return;
+        }
+        this.lastFireSaleCheckAt = currentTick;
+        const production = game.getVisibleUnits(
+            this.name,
+            "self",
+            (r) => r.constructionYard || (r.type === ObjectType.Building && r.factory !== FactoryType.None),
+        );
+        if (production.length > 0) {
+            return;
+        }
+        const mcvs = game.getVisibleUnits(
+            this.name,
+            "self",
+            (r) => !!r.deploysInto && game.getGeneralRules().baseUnit.includes(r.name),
+        );
+        if (mcvs.length > 0) {
+            // Still holding an MCV — rebuilding beats going out in flames.
+            return;
+        }
+        const buildings = game.getVisibleUnits(this.name, "self", (r) => r.type === ObjectType.Building);
+        if (buildings.length === 0) {
+            return;
+        }
+        this.fireSaleDone = true;
+        this.logBotStatus(`No production left — FIRE SALE! Selling everything and attacking with all we have.`, true);
+        buildings.forEach((id) => this.actionsApi.sellBuilding(id));
+        const combatants = game.getVisibleUnits(this.name, "self", (r) => r.isSelectableCombatant);
+        const myPlayer = game.getPlayerData(this.name);
+        const enemies = game
+            .getPlayers()
+            .filter((name) => name !== this.name && !game.areAlliedPlayers(this.name, name))
+            .map((name) => game.getPlayerData(name))
+            .filter((p) => p.isCombatant);
+        if (combatants.length > 0 && enemies.length > 0) {
+            let nearest = enemies[0];
+            let bestDistanceSq = Number.POSITIVE_INFINITY;
+            for (const enemy of enemies) {
+                const dx = enemy.startLocation.x - myPlayer.startLocation.x;
+                const dy = enemy.startLocation.y - myPlayer.startLocation.y;
+                const distanceSq = dx * dx + dy * dy;
+                if (distanceSq < bestDistanceSq) {
+                    bestDistanceSq = distanceSq;
+                    nearest = enemy;
+                }
+            }
+            this.actionsApi.orderUnits(
+                combatants.slice(0, 128),
+                OrderType.AttackMove,
+                nearest.startLocation.x,
+                nearest.startLocation.y,
             );
         }
     }

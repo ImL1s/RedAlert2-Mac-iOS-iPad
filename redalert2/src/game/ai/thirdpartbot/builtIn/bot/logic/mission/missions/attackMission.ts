@@ -375,11 +375,28 @@ function generateTarget(
     return null;
 }
 
-// Number of ticks between attacking visible targets.
-const VISIBLE_TARGET_ATTACK_COOLDOWN_TICKS = 60;
+// Launch-to-launch gate per difficulty. Retail TeamDelays are 2000/2500/3500
+// ticks (hard/normal/easy) — we keep the retail RATIO (1 : 1.25 : 1.75) at a
+// faster absolute pace so the Generals-style relentless cadence survives.
+// Personality multipliers layer on top.
+const LAUNCH_GATE_BY_DIFFICULTY: Record<string, number> = {
+    brutal: 600,
+    normal: 750,
+    easy: 1050,
+};
 
 // Number of ticks between attacking "bases" (enemy starting locations).
 const BASE_ATTACK_COOLDOWN_TICKS = 600;
+
+// Retail AIHateDelays: ticks before the AI picks its first enemy.
+const HATE_DELAY_BY_DIFFICULTY: Record<string, number> = {
+    brutal: 30,
+    normal: 50,
+    easy: 70,
+};
+// How long a grudge (someone attacked our base) locks the focus.
+const GRUDGE_HOLD_TICKS = 900;
+const FOCUS_REVIEW_INTERVAL_TICKS = 450;
 
 const ATTACK_MISSION_INITIAL_PRIORITY = 1;
 
@@ -413,8 +430,11 @@ export class AttackMissionFactory {
         private config?: EffectiveBotConfig,
         private triggerDb?: AiTriggerDatabase | null,
     ) {
+        // Difficulty sets the base gate (retail TeamDelays ratio); the
+        // personality multiplier shapes tempo on top — no double-dipping.
         const cooldownMultiplier = config?.attackCooldownMultiplier ?? 1;
-        this.visibleTargetCooldownTicks = Math.round(VISIBLE_TARGET_ATTACK_COOLDOWN_TICKS * cooldownMultiplier);
+        const launchGate = LAUNCH_GATE_BY_DIFFICULTY[config?.difficultyId ?? "normal"] ?? 750;
+        this.visibleTargetCooldownTicks = Math.round(launchGate * cooldownMultiplier);
         this.baseAttackCooldownTicks = Math.round(BASE_ATTACK_COOLDOWN_TICKS * cooldownMultiplier);
         this.firstAttackAllowedTick = (config?.firstAttackDelaySeconds ?? 0) * TICKS_PER_SECOND;
         this.maxPreparing = config?.maxPreparingAttacks ?? 2;
@@ -447,34 +467,71 @@ export class AttackMissionFactory {
         return roll < 50 ? "center" : roll < 80 ? "flank" : "backdoor";
     }
 
-    /** FFA focus: pick which enemy to hunt, re-evaluated every 2 minutes. */
-    private updateFocusEnemy(game: GameApi, playerData: PlayerData): void {
-        if (game.getCurrentTick() < this.lastFocusPickAt + 1800) {
+    /**
+     * Retail-style enemy focus: pick the CLOSEST enemy after AIHateDelays,
+     * then stay committed — switching only on a grudge (someone is attacking
+     * our base: RA1 sets Enemy to the attacker immediately) or when the
+     * current focus is crippled. No more quiet 2-minute re-rolls.
+     */
+    private updateFocusEnemy(game: GameApi, playerData: PlayerData, matchAwareness: MatchAwareness): void {
+        const currentTick = game.getCurrentTick();
+        const hateDelay = HATE_DELAY_BY_DIFFICULTY[this.config?.difficultyId ?? "normal"] ?? 50;
+        if (currentTick < hateDelay) {
             return;
         }
-        this.lastFocusPickAt = game.getCurrentTick();
+        if (this.focusEnemyName && currentTick < this.lastFocusPickAt + FOCUS_REVIEW_INTERVAL_TICKS) {
+            return;
+        }
+        this.lastFocusPickAt = currentTick;
         const enemies = game
             .getPlayers()
             .filter((name) => name !== playerData.name && !game.areAlliedPlayers(playerData.name, name))
             .map((name) => game.getPlayerData(name))
             .filter((p) => p.isCombatant);
-        if (enemies.length <= 1) {
-            this.focusEnemyName = enemies[0]?.name ?? null;
+        if (enemies.length === 0) {
+            this.focusEnemyName = null;
             return;
         }
-        const aggressive = this.config?.personalityId === "rusher" || this.config?.personalityId === "harasser";
+        if (enemies.length === 1) {
+            this.focusEnemyName = enemies[0].name;
+            return;
+        }
+
+        // Grudge: whoever has combat units in our base right now becomes the
+        // enemy, and stays it for a while.
+        const hostilesAtHome = matchAwareness.getHostilesNearPoint2d(playerData.startLocation, 25);
+        if (hostilesAtHome.length > 0) {
+            const aggressor = hostilesAtHome
+                .map(({ unitId }) => game.getUnitData(unitId))
+                .find((u) => u && game.getPlayerData(u.owner)?.isCombatant);
+            if (aggressor && aggressor.owner !== this.focusEnemyName) {
+                this.focusEnemyName = aggressor.owner;
+                this.lastFocusPickAt = currentTick + GRUDGE_HOLD_TICKS - FOCUS_REVIEW_INTERVAL_TICKS;
+                return;
+            }
+        }
+
+        // Sticky: keep the current focus unless they're crippled or gone.
+        if (this.focusEnemyName) {
+            const focus = enemies.find((enemy) => enemy.name === this.focusEnemyName);
+            if (focus && game.getVisibleUnits(focus.name, "self").length > 0) {
+                return;
+            }
+        }
+
+        // (Re)pick: closest by start location, with a personality tiebreak
+        // flavor — pile-on personalities prefer the weakest instead.
+        const pileOn = this.config?.personalityId === "opportunist" || this.config?.personalityId === "boomer";
         let best = enemies[0];
         let bestScore = Number.POSITIVE_INFINITY;
         for (const enemy of enemies) {
             let score: number;
-            if (aggressive) {
-                // Nearest neighbor gets the attention.
+            if (pileOn) {
+                score = game.getVisibleUnits(enemy.name, "self").length;
+            } else {
                 const dx = enemy.startLocation.x - playerData.startLocation.x;
                 const dy = enemy.startLocation.y - playerData.startLocation.y;
                 score = dx * dx + dy * dy;
-            } else {
-                // Pile onto the weakest.
-                score = game.getVisibleUnits(enemy.name, "self").length;
             }
             if (score < bestScore) {
                 bestScore = score;
@@ -589,7 +646,7 @@ export class AttackMissionFactory {
         if (!counterattacking && game.getCurrentTick() < this.lastLaunchAt + this.visibleTargetCooldownTicks) {
             return;
         }
-        this.updateFocusEnemy(game, playerData);
+        this.updateFocusEnemy(game, playerData, matchAwareness);
 
         // Cap concurrent assembling attacks (personality-driven multi-prong).
         const preparingCount = missionController

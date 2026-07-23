@@ -30,6 +30,15 @@ const PRODUCTION_STRUCTURE_NAMES = new Set([
 ]);
 const CASH_RICH_THRESHOLD = 5000;
 
+// Retail difficulty texture (probed rulesmd): easy AIs are nearly undefended
+// (6 statics vs 25 on brutal), run leaner economies (AIExtraRefineries=2,1,0;
+// AISlaveMinerNumber=4,3,2).
+const DEFENSE_CAP_BY_DIFFICULTY: Record<string, number> = { brutal: 25, normal: 20, easy: 6 };
+const EXTRA_REFINERIES_BY_DIFFICULTY: Record<string, number> = { brutal: 2, normal: 1, easy: 0 };
+const SLAVE_MINERS_BY_DIFFICULTY: Record<string, number> = { brutal: 4, normal: 3, easy: 2 };
+const REFINERY_NAMES = new Set(["GAREFN", "NAREFN"]);
+const SLAVE_MINER_NAME = "YAREFN";
+
 // Legacy mission encompassing the old "build queue" logic.
 export class BaseBuildingMission extends Mission {
     constructor(
@@ -119,6 +128,26 @@ export class BaseBuildingMission extends Mission {
             if (this.config && priority > 0) {
                 if (logic instanceof AntiGroundStaticDefence || logic instanceof AntiAirStaticDefence) {
                     priority *= this.config.defensePriorityMultiplier * (this.config.matchDoctrine?.doctrine.defensePriorityMultiplier ?? 1);
+                    // Retail per-difficulty static-defense budget.
+                    const defenseCap = DEFENSE_CAP_BY_DIFFICULTY[this.config.difficultyId] ?? 20;
+                    const owned = game.getVisibleUnits(playerStatus.name, "self", (r) => (r as any).isBaseDefense).length;
+                    if (owned >= defenseCap) {
+                        priority = 0;
+                    }
+                } else if (REFINERY_NAMES.has(option.name)) {
+                    // Retail AIExtraRefineries: 1 + {2,1,0} by difficulty.
+                    const refineryCap = 1 + (EXTRA_REFINERIES_BY_DIFFICULTY[this.config.difficultyId] ?? 1);
+                    const owned = game.getVisibleUnits(playerStatus.name, "self", (r) => r.name === option.name).length;
+                    if (owned >= refineryCap) {
+                        priority = 0;
+                    }
+                } else if (option.name === SLAVE_MINER_NAME) {
+                    // Retail AISlaveMinerNumber: 4/3/2 by difficulty.
+                    const minerCap = SLAVE_MINERS_BY_DIFFICULTY[this.config.difficultyId] ?? 3;
+                    const owned = game.getVisibleUnits(playerStatus.name, "self", (r) => r.name === SLAVE_MINER_NAME).length;
+                    if (owned >= minerCap) {
+                        priority = 0;
+                    }
                 } else if (TECH_STRUCTURE_NAMES.has(option.name)) {
                     priority *= this.config.techPriorityMultiplier * (this.config.matchDoctrine?.doctrine.techPriorityMultiplier ?? 1);
                 }

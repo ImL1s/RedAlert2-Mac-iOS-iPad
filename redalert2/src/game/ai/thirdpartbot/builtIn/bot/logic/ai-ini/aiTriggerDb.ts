@@ -110,11 +110,18 @@ export interface AiTriggerEntry {
     role: TeamRole;
     /** Stable parse-order index (used for the per-match trigger mask). */
     index: number;
+    /** Outcome history for the retail track-record bonus. */
+    successCount: number;
+    totalCount: number;
 }
 
-/** Retail [General] deltas (rulesmd): success/failure feedback on weights. */
-const SUCCESS_WEIGHT_DELTA = 5;
-const FAILURE_WEIGHT_DELTA = -3;
+// Genuine retail rulesmd [General] values (probed): AITriggerSuccessWeightDelta=20,
+// AITriggerFailureWeightDelta=-50, AITriggerTrackRecordCoefficient=1. Retail
+// feedback is brutal: a team that dies once is nearly benched, winners snowball
+// (successful teams also earn a track-record bonus).
+const SUCCESS_WEIGHT_DELTA = 20;
+const FAILURE_WEIGHT_DELTA = -50;
+const TRACK_RECORD_COEFFICIENT = 1;
 
 const ENGINEER_NAMES = new Set(["ENGINEER", "SENGINEER", "YENGINEER"]);
 
@@ -367,6 +374,8 @@ export class AiTriggerDatabase {
                     targetIntent: meta.intent,
                     role: meta.role,
                     index: this.entries.length,
+                    successCount: 0,
+                    totalCount: 0,
                 });
             }
         }
@@ -418,7 +427,16 @@ export class AiTriggerDatabase {
 
     /** Team outcome feedback, like retail: failed teams fade, winners repeat. */
     public reportOutcome(entry: AiTriggerEntry, success: boolean): void {
-        const delta = success ? SUCCESS_WEIGHT_DELTA : FAILURE_WEIGHT_DELTA;
+        entry.totalCount++;
+        let delta = FAILURE_WEIGHT_DELTA;
+        if (success) {
+            entry.successCount++;
+            // Retail track record: proven teams earn a compounding bonus.
+            const record = entry.successCount / entry.totalCount;
+            delta =
+                SUCCESS_WEIGHT_DELTA +
+                Math.max(0, entry.successCount * (record - 0.5)) * TRACK_RECORD_COEFFICIENT;
+        }
         entry.currentWeight = Math.min(
             entry.trigger.maxWeight,
             Math.max(entry.trigger.minWeight, entry.currentWeight + delta),
@@ -453,13 +471,28 @@ export class AiTriggerDatabase {
                 );
             }
             case 5:
-                // Own iron curtain ~charged: owning the building is our proxy.
-                return game.getVisibleUnits(playerData.name, "self", (r) => r.name === "NAIRON").length > 0;
+                // Retail: Iron Curtain charged to AIMinorSuperReadyPercent (0.7).
+                return this.ownSuperweaponCharged(game, playerData.name, 1 /* IronCurtain */);
             case 6:
-                return game.getVisibleUnits(playerData.name, "self", (r) => r.name === "GACSPH").length > 0;
+                return this.ownSuperweaponCharged(game, playerData.name, 3 /* ChronoSphere */);
             default:
                 // Unhandled (neutral-owns etc.) — don't fire.
                 return false;
+        }
+    }
+
+    /** Retail AIMinorSuperReadyPercent: charged enough to plan around. */
+    private ownSuperweaponCharged(game: GameApi, playerName: string, swType: number): boolean {
+        try {
+            const all = (game as any).getAllSuperWeaponData?.() ?? [];
+            return all.some(
+                (sw: any) =>
+                    sw.playerName === playerName &&
+                    Number(sw.type) === swType &&
+                    (Number(sw.status) === 2 || (sw.chargeProgress ?? 0) >= 0.7),
+            );
+        } catch (err) {
+            return false;
         }
     }
 

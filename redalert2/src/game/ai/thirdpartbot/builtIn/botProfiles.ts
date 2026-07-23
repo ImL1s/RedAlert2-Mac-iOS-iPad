@@ -15,12 +15,17 @@ export interface BotProfile {
     firstAttackDelaySeconds: number;
 }
 
+// Difficulty pacing note: attack cadence per difficulty now lives in the
+// attack factory's LAUNCH_GATE_BY_DIFFICULTY (retail TeamDelays ratio
+// 1 : 1.25 : 1.75); attackCooldownMultiplier here stays 1 so difficulty
+// isn't double-counted — personalities still multiply on top.
 export const EASY_BOT_PROFILE: BotProfile = {
     id: 'easy',
     apm: 60,
     armySizeMultiplier: 0.6,
-    attackCooldownMultiplier: 2.5,
-    firstAttackDelaySeconds: 360,
+    attackCooldownMultiplier: 1,
+    // Retail easy first-attack grace ≈ 3500 ticks (~235s).
+    firstAttackDelaySeconds: 235,
 };
 
 export const NORMAL_BOT_PROFILE: BotProfile = {
@@ -35,7 +40,7 @@ export const BRUTAL_BOT_PROFILE: BotProfile = {
     id: 'brutal',
     apm: 600,
     armySizeMultiplier: 1.5,
-    attackCooldownMultiplier: 0.5,
+    attackCooldownMultiplier: 1,
     firstAttackDelaySeconds: 0,
 };
 

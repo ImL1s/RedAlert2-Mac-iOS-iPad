@@ -57,7 +57,15 @@ type QueueState = {
     topItem: TechnoRulesWithPriority | undefined;
 };
 
-const REPAIR_CHECK_INTERVAL = 30;
+// Retail [AI] CreditReserve=100: don't wrench-repair below this bank
+// (conyard exempt — always worth repairing). Check cadence per difficulty
+// from retail RepairDelay (.02/.02/.05 min): easy bases smolder longer.
+const REPAIR_CREDIT_FLOOR = 100;
+const REPAIR_CHECK_INTERVAL_BY_DIFFICULTY: Record<string, number> = {
+    brutal: 18,
+    normal: 18,
+    easy: 45,
+};
 const PLACEMENT_FAILURE_RETRY_THRESHOLD = 3;
 const PLACEMENT_FAILURE_CANCEL_THRESHOLD = 10;
 
@@ -82,6 +90,13 @@ export class QueueController {
         aa: 1,
         antiArmor: 1,
         antiInfantry: 1,
+    };
+    // Retail AIForcePredictionFudge: how badly this difficulty misjudges the
+    // enemy army when picking counters (easy bots build the wrong things).
+    private static readonly CENSUS_FUDGE_BY_DIFFICULTY: Record<string, number> = {
+        brutal: 5,
+        normal: 25,
+        easy: 80,
     };
 
     constructor() {}
@@ -125,9 +140,17 @@ export class QueueController {
             this.counterMultipliers = { aa: 1, antiArmor: 1, antiInfantry: 1 };
             return;
         }
-        const airFrac = air / total;
-        const armorFrac = armor / total;
-        const infFrac = infantry / total;
+        // Fudge the appraisal per difficulty (retail AIForcePredictionFudge):
+        // easy bots misjudge your composition by up to +/-80% and answer with
+        // the wrong counters; brutal reads you nearly perfectly.
+        const fudge = QueueController.CENSUS_FUDGE_BY_DIFFICULTY[this.config?.difficultyId ?? "normal"] ?? 25;
+        const misjudge = (fraction: number): number => {
+            const jitter = game.generateRandomInt(-fudge, fudge) / 100;
+            return Math.max(0, fraction * (1 + jitter));
+        };
+        const airFrac = misjudge(air / total);
+        const armorFrac = misjudge(armor / total);
+        const infFrac = misjudge(infantry / total);
         this.counterMultipliers = {
             aa: Math.min(2.5, 1 + airFrac * 3),
             antiArmor: Math.min(2, 1 + armorFrac * 1.2),
@@ -184,11 +207,16 @@ export class QueueController {
         // growing and attack squads can assemble from free units instantly.
         this.updateBackgroundProduction(context, threatCache, logger);
 
-        // Repair is simple - just repair everything that's damaged.
-        if (playerData.credits > 0 && game.getCurrentTick() > this.lastRepairCheckAt + REPAIR_CHECK_INTERVAL) {
+        // Repair with retail economics: $100 floor (conyard exempt) and a
+        // per-difficulty cadence.
+        const repairInterval = REPAIR_CHECK_INTERVAL_BY_DIFFICULTY[this.config?.difficultyId ?? "normal"] ?? 30;
+        if (playerData.credits > 0 && game.getCurrentTick() > this.lastRepairCheckAt + repairInterval) {
             game.getVisibleUnits(playerData.name, "self", (r) => r.repairable).forEach((unitId) => {
                 const unit = game.getUnitData(unitId);
                 if (!unit || !unit.hitPoints || !unit.maxHitPoints || unit.hasWrenchRepair) {
+                    return;
+                }
+                if (playerData.credits <= REPAIR_CREDIT_FLOOR && !(unit.rules as any).constructionYard) {
                     return;
                 }
                 if (unit.hitPoints < unit.maxHitPoints) {

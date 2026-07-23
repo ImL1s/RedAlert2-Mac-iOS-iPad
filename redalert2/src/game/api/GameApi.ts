@@ -242,6 +242,7 @@ export class GameApi {
             type: weapon.rules.type,
             status: weapon.status,
             timerSeconds: weapon.getTimerSeconds(),
+            chargeProgress: weapon.getChargeProgress?.() ?? 0,
         })))
             .flat();
     }
