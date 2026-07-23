@@ -10,6 +10,9 @@ import { Strategy } from "./strategy/strategy";
 import { DefaultStrategy } from "./strategy/defaultStrategy";
 import { BOT_PERSONALITIES, BotProfile, NORMAL_BOT_PROFILE, resolveBotConfig } from "../botProfiles";
 import { BaseBuildingMission } from "./logic/mission/missions/baseBuildingMission";
+import { SuperweaponOfficer } from "./logic/superweapons";
+import { AttackMission, AttackMissionState } from "./logic/mission/missions/attackMission";
+import { DefenceMission } from "./logic/mission/missions/defenceMission";
 
 const DEBUG_STATE_UPDATE_INTERVAL_SECONDS = 6;
 
@@ -28,6 +31,8 @@ export class BuiltInBot extends Bot {
     private missionController: MissionController | null = null;
     private matchAwareness: MatchAwareness | null = null;
     private strategy: Strategy;
+    private superweaponOfficer: SuperweaponOfficer | null = null;
+    private lastRecallCheckAt = 0;
 
     // Messages to display in visualisation mode only.
     public _debugMessages: string[] = [];
@@ -62,6 +67,7 @@ export class BuiltInBot extends Bot {
             this.strategy = new DefaultStrategy(config);
         }
         this.queueController.setConfig(config);
+        this.superweaponOfficer = new SuperweaponOfficer(config);
         this.logBotStatus(`Difficulty "${this.profile.id}", personality "${personality.id}"`);
         console.log(`[BuiltInBot] "${this.name}" rolled personality "${personality.id}" (difficulty "${this.profile.id}")`);
 
@@ -164,6 +170,10 @@ export class BuiltInBot extends Bot {
                 this.strategy = this.strategy.onAiUpdate(fullContext, this.missionController, (message, sayInGame) =>
                     this.logBotStatus(message, sayInGame),
                 );
+                this.superweaponOfficer?.onAiUpdate(fullContext, this.missionController, (message, sayInGame) =>
+                    this.logBotStatus(message, sayInGame),
+                );
+                this.maybeRecallDefenders(fullContext);
             }
 
             const unitTypeRequests = this.missionController.getRequestedUnitTypes();
@@ -173,6 +183,52 @@ export class BuiltInBot extends Bot {
                 this.logBotStatus(message),
             );
         }
+    }
+
+    /**
+     * When home defence is clearly outgunned, pull the weakest attacking
+     * squad back (forced disband -> automatic retreat home, where the
+     * defence mission's grab picks the survivors up). Runs sparsely.
+     */
+    private maybeRecallDefenders(context: SupabotContext): void {
+        const { game, matchAwareness } = context;
+        const currentTick = game.getCurrentTick();
+        if (currentTick < this.lastRecallCheckAt + 300 || !this.missionController) {
+            return;
+        }
+        this.lastRecallCheckAt = currentTick;
+
+        const missions = this.missionController.getMissions();
+        const activeDefences = missions.filter(
+            (mission): mission is DefenceMission => mission instanceof DefenceMission && mission.getPriority() > 0,
+        );
+        if (activeDefences.length === 0) {
+            return;
+        }
+        const defenderCount = activeDefences.reduce((sum, mission) => sum + mission.getUnitIds().length, 0);
+        // Count hostiles around whichever defended point (main base OR
+        // expansion) is under the heaviest pressure.
+        let hostilesNearBase = 0;
+        for (const defence of activeDefences) {
+            const hostiles = matchAwareness.getHostilesNearPoint2d(defence.getDefendedPoint(), 25).length;
+            hostilesNearBase = Math.max(hostilesNearBase, hostiles);
+        }
+        if (hostilesNearBase <= Math.max(3, defenderCount * 1.5)) {
+            return;
+        }
+
+        const attacking = missions.filter(
+            (mission): mission is AttackMission =>
+                mission instanceof AttackMission && mission.getState() === AttackMissionState.Attacking,
+        );
+        if (attacking.length === 0) {
+            return;
+        }
+        const weakest = attacking.reduce((a, b) => (a.getUnitIds().length <= b.getUnitIds().length ? a : b));
+        this.logBotStatus(
+            `Base under heavy attack (${hostilesNearBase} hostiles vs ${defenderCount} defenders) — recalling ${weakest.getUniqueName()}.`,
+        );
+        this.missionController.disbandMission(weakest.getUniqueName());
     }
 
     private tryInitialMcvDeploy(game: GameApi): void {

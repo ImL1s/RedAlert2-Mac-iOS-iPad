@@ -14,10 +14,11 @@ import { queueTypeToName } from "../../building/queueController";
 import { EffectiveBotConfig } from "../../../../botProfiles";
 
 // Tier/tech unlock structures: a teching personality rushes these, a rusher
-// deprioritizes them.
+// deprioritizes them. Superweapon buildings ride the same knob.
 const TECH_STRUCTURE_NAMES = new Set([
     "GATECH", "NATECH", "YATECH",
     "GAAIRC", "AMRADR", "NARADR", "NAPSIS", "NACLON",
+    "GAWEAT", "GACSPH", "NAMISL", "NAIRON", "YAPPET", "YAGNTC",
 ]);
 
 // Legacy mission encompassing the old "build queue" logic.

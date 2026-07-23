@@ -12,14 +12,26 @@ export class BatchableAction {
         private _targetId?: number,
         // If you don't want this action to be swallowed by dedupe, provide a unique nonce
         private _nonce: number = 0,
+        // While an order with a cooldown is in flight, the squad holds off on
+        // issuing a DIFFERENT order to the same unit until it expires (used
+        // for flying units, whose pathing churns if re-ordered every update).
+        private _cooldownTicks: number = 0,
     ) {}
+
+    public withCooldown(cooldownTicks: number): BatchableAction {
+        return new BatchableAction(this._unitId, this._orderType, this._point, this._targetId, this._nonce, cooldownTicks);
+    }
+
+    public get cooldownTicks() {
+        return this._cooldownTicks;
+    }
 
     static noTarget(unitId: number, orderType: OrderType, nonce: number = 0) {
         return new BatchableAction(unitId, orderType, undefined, undefined, nonce);
     }
 
     static toPoint(unitId: number, orderType: OrderType, point: Vector2, nonce: number = 0) {
-        return new BatchableAction(unitId, orderType, point, undefined);
+        return new BatchableAction(unitId, orderType, point, undefined, nonce);
     }
 
     static toTargetId(unitId: number, orderType: OrderType, targetId: number, nonce: number = 0) {
@@ -49,7 +61,15 @@ export class BatchableAction {
         if (this._orderType !== other._orderType) {
             return false;
         }
-        if (this._point !== other._point) {
+        // Compare points by value: squads pass freshly-allocated Vector2s each
+        // update, and a reference compare defeats cross-tick dedupe entirely
+        // (units had their pathing reset every order refresh).
+        const a = this._point;
+        const b = other._point;
+        if ((a === undefined) !== (b === undefined)) {
+            return false;
+        }
+        if (a && b && (a.x !== b.x || a.y !== b.y)) {
             return false;
         }
         if (this._targetId !== other._targetId) {

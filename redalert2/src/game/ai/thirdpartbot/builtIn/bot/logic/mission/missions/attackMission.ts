@@ -1,4 +1,4 @@
-import { GameApi, ObjectType, PlayerData, UnitData, Vector2 } from "../../../../game-api";
+import { FactoryType, GameApi, ObjectType, PlayerData, UnitData, Vector2 } from "../../../../game-api";
 import { CombatSquad } from "./squads/combatSquad";
 import { Mission, MissionAction, disbandMission, noop, requestUnits } from "../mission";
 import { MatchAwareness } from "../../awareness";
@@ -9,7 +9,7 @@ import { manageMoveMicro } from "./squads/common";
 import { MissionContext, SupabotContext } from "../../common/context";
 import { UnitComposition } from "../../../strategy/strategy";
 import { SideComposition } from "../../../strategy/compositionUtils";
-import { AiTriggerDatabase, AiTriggerEntry } from "../../ai-ini/aiTriggerDb";
+import { AiTriggerDatabase, AiTriggerEntry, TargetIntent } from "../../ai-ini/aiTriggerDb";
 import { EffectiveBotConfig, TargetPreference } from "../../../../botProfiles";
 
 export enum AttackFailReason {
@@ -17,9 +17,11 @@ export enum AttackFailReason {
     DefenceTooStrong = "DefenceTooStrong",
     UnableToAcquireUnits = "UnableToAcquireUnits",
     OutOfUnits = "OutOfUnits",
+    // The squad judged the fight lost and broke off (see CombatSquad).
+    Repelled = "Repelled",
 }
 
-enum AttackMissionState {
+export enum AttackMissionState {
     Preparing = 0,
     Attacking = 1,
     Retreating = 2,
@@ -27,6 +29,12 @@ enum AttackMissionState {
 
 const NO_TARGET_RETARGET_TICKS = 300;
 const NO_TARGET_IDLE_TIMEOUT_TICKS = 600;
+
+// Ongoing attacks top up with fresh units at this cadence/priority. Priority
+// sits BELOW the preparing ramp's starting value (1), so an assembling squad
+// always outbids reinforcement for contested units and never donates its own.
+const REINFORCE_INTERVAL_TICKS = 150;
+const REINFORCE_PRIORITY = 0.75;
 
 const ATTACK_MISSION_PRIORITY_RAMP = 1.01;
 const ATTACK_MISSION_MAX_PRIORITY = 50;
@@ -46,6 +54,7 @@ export class AttackMission extends Mission<AttackFailReason> {
     private requestedUnitCount: number;
     private lastRequestedUnitCountDecayAt: number | null = null;
     private preparingSinceTick: number | null = null;
+    private lastReinforceRequestAt = 0;
 
     constructor(
         uniqueName: string,
@@ -58,9 +67,11 @@ export class AttackMission extends Mission<AttackFailReason> {
         // Launch with a partial squad after this long assembling; retail teams
         // don't wait forever for the perfect roster and neither should we.
         private launchTimeoutTicks: number = 1350,
+        // The team's retail-script hunting preference (harvesters, factories...).
+        private targetIntent: TargetIntent = null,
     ) {
         super(uniqueName, logger);
-        this.squad = new CombatSquad(rallyArea, attackArea, radius);
+        this.squad = new CombatSquad(rallyArea, attackArea, radius, true);
         this.requestedUnitCount = composition.maximumUnits;
     }
 
@@ -156,10 +167,31 @@ export class AttackMission extends Mission<AttackFailReason> {
             !this.hasPickedNewTarget &&
             game.getCurrentTick() > this.lastTargetSeenAt + NO_TARGET_RETARGET_TICKS
         ) {
-            const newTarget = generateTarget(game, playerData, matchAwareness);
+            const newTarget = generateTarget(game, playerData, matchAwareness, false, "any", this.targetIntent);
             if (newTarget) {
+                // Keep the mission's own record in sync — the superweapon
+                // officer reads getAttackArea() for chronoshift destinations.
+                this.attackArea = newTarget;
                 this.squad.setAttackArea(newTarget);
                 this.hasPickedNewTarget = true;
+            }
+        }
+
+        // Reinforcement stream: fresh production keeps flowing to an ongoing
+        // push instead of pooling at home. Low priority so it never starves a
+        // still-assembling squad.
+        if (
+            game.getCurrentTick() > this.lastReinforceRequestAt + REINFORCE_INTERVAL_TICKS &&
+            this.getUnitIds().length < this.composition.maximumUnits
+        ) {
+            this.lastReinforceRequestAt = game.getCurrentTick();
+            const desiredComposition = this.getDesiredComposition();
+            const missingUnits = this.getMissingUnits(game, desiredComposition);
+            if (missingUnits.length > 0) {
+                const unitPriorities = Object.fromEntries(
+                    missingUnits.map(([unitName]) => [unitName, REINFORCE_PRIORITY]),
+                );
+                return requestUnits(unitPriorities);
             }
         }
 
@@ -169,7 +201,10 @@ export class AttackMission extends Mission<AttackFailReason> {
     private handleRetreatingState(context: MissionContext) {
         const { game, actionBatcher, matchAwareness } = context;
         this.getUnits(game).forEach((unitId) => {
-            actionBatcher.push(manageMoveMicro(unitId, matchAwareness.getMainRallyPoint()));
+            const action = manageMoveMicro(unitId, matchAwareness.getMainRallyPoint());
+            if (action) {
+                actionBatcher.push(action);
+            }
         });
         // Note: probably should just disband rather than have a retreating state
         return disbandMission(AttackFailReason.OutOfUnits);
@@ -181,6 +216,10 @@ export class AttackMission extends Mission<AttackFailReason> {
 
     public getState() {
         return this.state;
+    }
+
+    public getAttackArea(): Vector2 {
+        return this.attackArea;
     }
 
     // This mission can give up its units while preparing.
@@ -235,12 +274,36 @@ const getTargetWeight: (unitData: UnitData, tryFocusHarvester: boolean) => numbe
     }
 };
 
+/** Does this unit match the retail script's hunting intent? */
+function matchesIntent(unit: UnitData, intent: TargetIntent): boolean {
+    const rules: any = unit.rules;
+    switch (intent) {
+        case "harvesters":
+            return !!rules.harvester || !!rules.refinery;
+        case "buildings":
+            return (unit.type as any) === ObjectType.Building;
+        case "defenses":
+            return !!rules.isBaseDefense;
+        case "factories":
+            return rules.factory !== undefined && rules.factory !== FactoryType.None;
+        case "power":
+            return (unit.type as any) === ObjectType.Building && (rules.power ?? 0) > 0;
+        case "infantry":
+            return (unit.type as any) === ObjectType.Infantry;
+        case "vehicles":
+            return (unit.type as any) === ObjectType.Vehicle;
+        default:
+            return false;
+    }
+}
+
 function generateTarget(
     gameApi: GameApi,
     playerData: PlayerData,
     matchAwareness: MatchAwareness,
     includeBaseLocations: boolean = false,
     targetPreference: TargetPreference = "any",
+    targetIntent: TargetIntent = null,
 ): Vector2 | null {
     // Randomly decide between harvester and base.
     try {
@@ -253,6 +316,10 @@ function generateTarget(
 
         const weighted = (u: UnitData) => {
             let weight = getTargetWeight(u, tryFocusHarvester);
+            // The team's retail script says what it hunts: strongly prefer it.
+            if (targetIntent && targetIntent !== "anything" && matchesIntent(u, targetIntent)) {
+                weight = weight * 4;
+            }
             if (targetPreference === "weakest") {
                 // Prefer targets with few defenders around them.
                 const defenders = matchAwareness.getHostilesNearPoint(u.tile.rx, u.tile.ry, 8).length;
@@ -310,6 +377,9 @@ export class AttackMissionFactory {
     private readonly launchTimeoutTicks: number;
     private readonly targetPreference: TargetPreference;
     private lastAttackAt: number;
+    // While open (after repelling an enemy attack), cooldowns are waived and
+    // one extra squad may assemble: hit them while they're weak.
+    private counterattackUntilTick = 0;
 
     constructor(
         private config?: EffectiveBotConfig,
@@ -327,6 +397,11 @@ export class AttackMissionFactory {
 
     getName(): string {
         return "AttackMissionFactory";
+    }
+
+    /** Open a short window of heightened aggression (e.g. after repelling an attack). */
+    public openCounterattackWindow(currentTick: number, durationTicks: number = 900): void {
+        this.counterattackUntilTick = Math.max(this.counterattackUntilTick, currentTick + durationTicks);
     }
 
     /** Team cost class → personality bias multiplier. */
@@ -395,11 +470,12 @@ export class AttackMissionFactory {
     ): void {
         const { game, matchAwareness } = context;
         const playerData = game.getPlayerData(context.player.name);
+        const counterattacking = game.getCurrentTick() < this.counterattackUntilTick;
 
         if (game.getCurrentTick() < this.firstAttackAllowedTick) {
             return;
         }
-        if (game.getCurrentTick() < this.lastAttackAt + this.visibleTargetCooldownTicks) {
+        if (!counterattacking && game.getCurrentTick() < this.lastAttackAt + this.visibleTargetCooldownTicks) {
             return;
         }
 
@@ -410,7 +486,7 @@ export class AttackMissionFactory {
                 (mission): mission is AttackMission =>
                     mission instanceof AttackMission && mission.getState() === AttackMissionState.Preparing,
             ).length;
-        if (preparingCount >= this.maxPreparing) {
+        if (preparingCount >= this.maxPreparing + (counterattacking ? 1 : 0)) {
             return;
         }
 
@@ -424,7 +500,15 @@ export class AttackMissionFactory {
 
         const includeEnemyBases = game.getCurrentTick() > this.lastAttackAt + this.baseAttackCooldownTicks;
 
-        const attackArea = generateTarget(game, playerData, matchAwareness, includeEnemyBases, this.targetPreference);
+        const intent = triggerEntry?.targetIntent ?? null;
+        const attackArea = generateTarget(
+            game,
+            playerData,
+            matchAwareness,
+            includeEnemyBases,
+            this.targetPreference,
+            intent,
+        );
 
         if (!attackArea) {
             return;
@@ -443,16 +527,18 @@ export class AttackMissionFactory {
                 composition,
                 logger,
                 this.launchTimeoutTicks,
+                intent,
             ).withOnFinish((unitIds, reason) => {
                 logger(
                     `Attack ${squadName} (${JSON.stringify(composition)}) with ${
                         unitIds.length
                     } units finished with reason: ${reason}`,
                 );
-                // Retail-style trigger feedback: cleared the area = success,
-                // died or never assembled = failure. Failed teams fade from
-                // the pool; successful ones get picked again.
-                if (triggerDb && triggerEntry) {
+                // Retail-style trigger feedback: cleared the area = success;
+                // wiped/repelled/never-assembled = failure. A forced disband
+                // (reason null/undefined, e.g. recalled to defend home) is
+                // NOT a verdict on the composition and reports nothing.
+                if (triggerDb && triggerEntry && reason != null) {
                     triggerDb.reportOutcome(triggerEntry, reason === AttackFailReason.NoTargets);
                 }
                 missionController.addMission(

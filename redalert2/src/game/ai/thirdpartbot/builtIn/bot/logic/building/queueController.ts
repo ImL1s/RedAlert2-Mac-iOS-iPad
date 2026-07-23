@@ -327,7 +327,15 @@ export class QueueController {
                 }
             } else {
                 // Not changing our mind, but maybe other queues are more important for now.
-                if (totalCostAcrossQueues > myCredits && decision.priority < totalWeightAcrossQueues * 0.25) {
+                // Only building queues participate in the pause-to-save-money
+                // dance: pausing a unit queue also blocks background army
+                // production (it skips non-Idle queues), and low-priority
+                // reinforcement requests would stall it for minutes.
+                if (
+                    isBuildingQueue(queueType) &&
+                    totalCostAcrossQueues > myCredits &&
+                    decision.priority < totalWeightAcrossQueues * 0.25
+                ) {
                     logger(
                         `Pausing queue ${queueTypeToName(queueData.type)} because weight is low (${
                             decision.priority
@@ -337,8 +345,12 @@ export class QueueController {
                 }
             }
         } else if (queueData.status == QueueStatus.OnHold) {
-            // Consider resuming queue if priority is high relative to other queues.
-            if (myCredits >= totalCostAcrossQueues) {
+            // Unit queues never stay paused (see above); building queues
+            // resume when priority or credits justify it.
+            if (!isBuildingQueue(queueType)) {
+                logger(`Resuming unit queue ${queueTypeToName(queueData.type)}`);
+                actionsApi.resumeProduction(queueData.type);
+            } else if (myCredits >= totalCostAcrossQueues) {
                 logger(`Resuming queue ${queueTypeToName(queueData.type)} because credits are high`);
                 actionsApi.resumeProduction(queueData.type);
             } else if (decision && decision.priority >= totalWeightAcrossQueues * 0.25) {

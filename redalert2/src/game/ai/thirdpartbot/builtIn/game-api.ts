@@ -25,6 +25,8 @@ export { StanceType } from '@/game/gameobject/infantry/StanceType';
 export { ZoneType } from '@/game/gameobject/unit/ZoneType';
 export { FactoryType } from '@/game/rules/TechnoRules';
 export { TechnoRules } from '@/game/rules/TechnoRules';
+export { SuperWeaponType } from '@/game/type/SuperWeaponType';
+export { SuperWeaponStatus } from '@/game/SuperWeapon';
 export { WeaponRules } from '@/game/rules/WeaponRules';
 export { ProjectileRules } from '@/game/rules/ProjectileRules';
 

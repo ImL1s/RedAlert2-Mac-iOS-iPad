@@ -2,6 +2,7 @@ import { ActionType } from '@/game/action/ActionType';
 import { UpdateType } from '@/game/action/UpdateQueueAction';
 import { DebugCommand, DebugCommandType } from '@/game/action/DebugAction';
 import { TargetBridgeMode } from '@/game/Target';
+import { SuperWeaponType } from '@/game/type/SuperWeaponType';
 interface Tile {
     x: number;
     y: number;
@@ -153,6 +154,13 @@ export class ActionsApi {
         rx: number;
         ry: number;
     }): void {
+        // ChronoSphere REQUIRES a destination tile; without it the effect
+        // throws inside deterministic tick processing (crash/desync), so
+        // reject the malformed request here instead.
+        if (superWeaponType === SuperWeaponType.ChronoSphere && !secondaryTile) {
+            console.warn('[ActionsApi] ChronoSphere activation requires a secondaryTile; ignored');
+            return;
+        }
         this.createAndPushAction(ActionType.ActivateSuperWeapon, (action) => {
             action.superWeaponType = superWeaponType;
             action.tile = { x: targetTile.rx, y: targetTile.ry };

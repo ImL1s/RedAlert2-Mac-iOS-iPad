@@ -2,14 +2,15 @@ import { Strategy } from "./strategy";
 import { ExpansionMissionFactory } from "../logic/mission/missions/expansionMission";
 import { ScoutingMissionFactory } from "../logic/mission/missions/scoutingMission";
 import { AttackMissionFactory } from "../logic/mission/missions/attackMission";
-import { DefenceMissionFactory } from "../logic/mission/missions/defenceMission";
+import { DefenceMission, DefenceMissionFactory } from "../logic/mission/missions/defenceMission";
 import { EngineerMissionFactory } from "../logic/mission/missions/engineerMission";
 import { SupabotContext } from "../logic/common/context";
 import { MissionController } from "../logic/mission/missionController";
 import { DebugLogger } from "../logic/common/utils";
 import { Compositions, getValidCompositions, SideComposition } from "./compositionUtils";
-import { AiTriggerDatabase } from "../logic/ai-ini/aiTriggerDb";
+import { AiTriggerDatabase, BuildingFacts } from "../logic/ai-ini/aiTriggerDb";
 import { EffectiveBotConfig, NORMAL_BOT_PROFILE, resolveBotConfig, BOT_PERSONALITIES } from "../../botProfiles";
+import { FactoryType } from "../../game-api";
 import { Engine } from "@/engine/Engine";
 
 const DEFAULT_CONFIG: EffectiveBotConfig = resolveBotConfig(
@@ -159,8 +160,48 @@ export function buildAiTriggerDatabase(context: SupabotContext): AiTriggerDataba
         collectCosts(costs, rulesApi?.infantryRules);
         collectCosts(costs, rulesApi?.vehicleRules);
         collectCosts(costs, rulesApi?.aircraftRules);
-        const db = new AiTriggerDatabase(aiIni, (unitName) => costs.get(unitName) ?? 0);
-        console.log(`[BuiltInBot] ai.ini trigger database: ${db.entries.length} usable attack teams`);
+
+        // Attack Enemy Structure script actions reference buildings by their
+        // [BuildingTypes] list position (registration order, 0-based) — read
+        // the list straight from the merged rules ini.
+        const buildingNames: string[] = [];
+        const btSection = (Engine as any).rules?.getSection?.("BuildingTypes");
+        if (btSection) {
+            for (const [, value] of btSection.entries) {
+                const name = String(Array.isArray(value) ? value[0] : value).trim();
+                if (name) {
+                    buildingNames.push(name);
+                }
+            }
+        }
+        const buildingRulesMap = rulesApi?.buildingRules;
+        const lookupBuilding = (name: string): any =>
+            buildingRulesMap instanceof Map ? buildingRulesMap.get(name) : buildingRulesMap?.[name];
+        const buildingByIndex = (index: number): BuildingFacts | null => {
+            const name = buildingNames[index];
+            if (!name) {
+                return null;
+            }
+            const rules = lookupBuilding(name);
+            if (!rules) {
+                return null;
+            }
+            return {
+                isFactory: rules.factory !== undefined && rules.factory !== FactoryType.None,
+                isRefinery: !!rules.refinery,
+                isBaseDefense: !!rules.isBaseDefense,
+                power: rules.power ?? 0,
+            };
+        };
+
+        const db = new AiTriggerDatabase(aiIni, (unitName) => costs.get(unitName) ?? 0, buildingByIndex);
+        const roleCounts = db.entries.reduce(
+            (acc, e) => ((acc[e.role] = (acc[e.role] ?? 0) + 1), acc),
+            {} as Record<string, number>,
+        );
+        console.log(
+            `[BuiltInBot] ai.ini trigger database: ${db.entries.length} teams (${JSON.stringify(roleCounts)})`,
+        );
         return db;
     } catch (err) {
         console.warn("[BuiltInBot] failed to parse ai.ini triggers, falling back to static compositions", err);
@@ -174,6 +215,7 @@ export class DefaultStrategy implements Strategy {
     private attackFactory: AttackMissionFactory | null = null;
     private defenceFactory = new DefenceMissionFactory();
     private engineerFactory = new EngineerMissionFactory();
+    private hadActiveDefence = false;
 
     constructor(private config: EffectiveBotConfig = DEFAULT_CONFIG) {}
 
@@ -192,6 +234,19 @@ export class DefaultStrategy implements Strategy {
 
         this.defenceFactory.maybeCreateMissions(context, missionController, logger);
         this.engineerFactory.maybeCreateMissions(context, missionController, logger);
+
+        // Counterattack: the moment a defence stands down (attackers wiped or
+        // driven off), punch back while the enemy army is spent. Opportunists
+        // get a longer window.
+        const defenceActive = missionController
+            .getMissions()
+            .some((mission) => mission instanceof DefenceMission && mission.getPriority() > 0);
+        if (this.hadActiveDefence && !defenceActive) {
+            const duration = this.config.personalityId === "opportunist" ? 1350 : 900;
+            this.attackFactory.openCounterattackWindow(context.game.getCurrentTick(), duration);
+            logger(`Defence stood down — counterattack window open (${duration} ticks).`);
+        }
+        this.hadActiveDefence = defenceActive;
 
         return this;
     }

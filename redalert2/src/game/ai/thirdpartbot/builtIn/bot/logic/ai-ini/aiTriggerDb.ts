@@ -32,6 +32,48 @@ export interface AiTeamType {
     isBaseDefense: boolean;
     autocreate: boolean;
     taskForceId: string;
+    scriptId: string;
+}
+
+/**
+ * What a team's retail script says it should hunt (from the first Attack
+ * Quarry Type / Attack Enemy Structure action).
+ */
+export type TargetIntent =
+    | "anything"
+    | "harvesters"
+    | "buildings"
+    | "defenses"
+    | "factories"
+    | "infantry"
+    | "vehicles"
+    | "power"
+    | null;
+
+/** Coarse role derived from the script: only 'attack' teams get thrown at the enemy. */
+export type TeamRole = "attack" | "guard" | "expand";
+
+// Script action 0 argument -> intent (ModEnc quarry types).
+const QUARRY_TO_INTENT: Record<number, TargetIntent> = {
+    1: "anything",
+    2: "buildings",
+    3: "harvesters",
+    4: "infantry",
+    5: "vehicles",
+    6: "factories",
+    7: "defenses",
+    8: "anything",
+    9: "power",
+    10: "buildings",
+    11: "buildings",
+};
+
+/** Minimal building facts needed to categorize an Attack Enemy Structure action. */
+export interface BuildingFacts {
+    isFactory: boolean;
+    isRefinery: boolean;
+    isBaseDefense: boolean;
+    power: number;
 }
 
 export interface AiTrigger {
@@ -62,6 +104,10 @@ export interface AiTriggerEntry {
     /** Sum of `cost * count` over the taskforce at parse time. */
     totalCost: number;
     currentWeight: number;
+    /** From the team's retail script: what this team hunts. */
+    targetIntent: TargetIntent;
+    /** attack / guard / expand — only attack teams join the offensive pool. */
+    role: TeamRole;
 }
 
 /** Retail [General] deltas (rulesmd): success/failure feedback on weights. */
@@ -134,8 +180,14 @@ export class AiTriggerDatabase {
     /**
      * @param aiIni the parsed ai(md).ini (Engine.ai)
      * @param unitCost resolver for a unit's credit cost (0 if unknown)
+     * @param buildingByIndex resolver for [BuildingTypes] list index → facts
+     *        (used to categorize Attack Enemy Structure script actions)
      */
-    constructor(aiIni: IniFileLike, unitCost: (unitName: string) => number) {
+    constructor(
+        aiIni: IniFileLike,
+        unitCost: (unitName: string) => number,
+        buildingByIndex?: (index: number) => BuildingFacts | null,
+    ) {
         const taskForces = new Map<string, AiTaskForce>();
         const teamTypes = new Map<string, AiTeamType>();
 
@@ -181,9 +233,85 @@ export class AiTriggerDatabase {
                     isBaseDefense: parseBool(section.getString("IsBaseDefense")),
                     autocreate: parseBool(section.getString("Autocreate")),
                     taskForceId,
+                    scriptId: section.getString("Script"),
                 });
             }
         }
+
+        // Parse each team's script for role + targeting intent. Retail scripts
+        // encode what a team is FOR: quarry-type attacks, structure attacks,
+        // home-guard patrol loops, or MCV expansion. Without this, guard dog
+        // packs and MCVs get thrown across the map as "attack squads".
+        const scriptMeta = new Map<string, { role: TeamRole; intent: TargetIntent }>();
+        const readScriptMeta = (scriptId: string): { role: TeamRole; intent: TargetIntent } => {
+            const cached = scriptMeta.get(scriptId);
+            if (cached) {
+                return cached;
+            }
+            const result: { role: TeamRole; intent: TargetIntent } = { role: "attack", intent: "anything" };
+            const section = aiIni.getSection(scriptId);
+            if (section) {
+                const actions: { action: number; arg: number }[] = [];
+                for (const [key, value] of section.entries) {
+                    if (!/^\d+$/.test(key)) continue;
+                    const raw = rawString(value);
+                    if (!raw) continue;
+                    const [actionStr, argStr] = raw.split(",");
+                    const action = parseInt(actionStr, 10);
+                    const arg = parseInt(argStr, 10);
+                    if (Number.isFinite(action)) {
+                        actions.push({ action, arg: Number.isFinite(arg) ? arg : 0 });
+                    }
+                }
+                let intent: TargetIntent = null;
+                for (const { action, arg } of actions) {
+                    if (action === 0 && arg >= 1 && QUARRY_TO_INTENT[arg]) {
+                        intent = QUARRY_TO_INTENT[arg];
+                        break;
+                    }
+                    if (action === 46) {
+                        const facts = buildingByIndex?.(arg % 65536) ?? null;
+                        intent = !facts
+                            ? "buildings"
+                            : facts.isFactory
+                              ? "factories"
+                              : facts.isRefinery
+                                ? "harvesters"
+                                : facts.isBaseDefense
+                                  ? "defenses"
+                                  : facts.power > 0
+                                    ? "power"
+                                    : "buildings";
+                        break;
+                    }
+                    if (action === 59) {
+                        intent = "buildings";
+                        break;
+                    }
+                }
+                if (intent) {
+                    result.role = "attack";
+                    result.intent = intent;
+                } else if (actions.some(({ action }) => action === 9)) {
+                    // Deploy — MCV expansion team.
+                    result.role = "expand";
+                    result.intent = null;
+                } else if (
+                    actions.some(
+                        ({ action, arg }) =>
+                            action === 58 || action === 61 || action === 62 || action === 63 ||
+                            (action === 11 && arg === 11),
+                    )
+                ) {
+                    // Move-to-friendly-structure / occupy-bunker / area-guard
+                    // loops — home guard, not an assault team.
+                    result.role = "guard";
+                    result.intent = null;
+                }
+            }
+            scriptMeta.set(scriptId, result);
+            return result;
+        };
 
         const atList = aiIni.getSection("AITriggerTypes");
         if (atList) {
@@ -227,12 +355,15 @@ export class AiTriggerDatabase {
                 for (const [unitName, count] of Object.entries(taskForce.units)) {
                     totalCost += unitCost(unitName) * count;
                 }
+                const meta = readScriptMeta(teamType.scriptId);
                 this.entries.push({
                     trigger,
                     teamType,
                     taskForce,
                     totalCost,
                     currentWeight: trigger.startWeight,
+                    targetIntent: meta.intent,
+                    role: meta.role,
                 });
             }
         }
@@ -253,6 +384,8 @@ export class AiTriggerDatabase {
         return this.entries.filter((entry) => {
             const { trigger, taskForce } = entry;
             if (trigger.isBaseDefense) return false;
+            // Guard/patrol and MCV-expansion teams are not assault teams.
+            if (entry.role !== "attack") return false;
             if (trigger.side !== 0 && trigger.side !== mySide) return false;
             if (difficulty === "easy" && !trigger.enabledInEasy) return false;
             if (difficulty === "medium" && !trigger.enabledInMedium) return false;

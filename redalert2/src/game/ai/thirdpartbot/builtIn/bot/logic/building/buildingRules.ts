@@ -195,6 +195,8 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
 
     ["GATECH", new BasicBuilding(20, 1, 4000)], // Allied Battle Lab
     ["GAYARD", new BasicBuilding(0, 0, 0)], // Naval Yard, disabled
+    ["GAWEAT", new BasicBuilding(6, 1, 5000)], // Weather Controller
+    ["GACSPH", new BasicBuilding(5, 1, 5000)], // Chronosphere
 
     ["GAPILL", new AntiGroundStaticDefence(2, 1, 7.5, 5)], // Pillbox
     ["ATESLA", new AntiGroundStaticDefence(2, 1, 10, 3)], // Prism Cannon
@@ -224,6 +226,8 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["NAYARD", new BasicBuilding(0, 0, 0)], // Naval Yard, disabled
 
     ["NATECH", new BasicBuilding(20, 1, 4000)], // Soviet Battle Lab
+    ["NAMISL", new BasicBuilding(6, 1, 5000)], // Nuclear Missile Silo
+    ["NAIRON", new BasicBuilding(5, 1, 5000)], // Iron Curtain
 
     ["NALASR", new AntiGroundStaticDefence(2, 1, 7.5, 5)], // Sentry Gun
     ["NAFLAK", new AntiAirStaticDefence(1, 1, 7.5)], // Flak Cannon
@@ -255,6 +259,8 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["NAPSIS", new BasicBuilding(10, 1, 500)], // Psychic Sensor (Yuri radar)
     ["YATECH", new BasicBuilding(20, 1, 4000)], // Yuri Battle Lab
     ["NACLON", new BasicBuilding(8, 1, 2500)], // Cloning Vats
+    ["YAPPET", new BasicBuilding(6, 1, 5000)], // Psychic Dominator
+    ["YAGNTC", new BasicBuilding(4, 1, 4000)], // Genetic Mutator
 
     ["YAGGUN", new AntiGroundStaticDefence(2, 1, 10, 3)], // Gattling Cannon (also AA)
     ["YAPSYT", new AntiGroundStaticDefence(2, 1, 10, 3)], // Psychic Tower

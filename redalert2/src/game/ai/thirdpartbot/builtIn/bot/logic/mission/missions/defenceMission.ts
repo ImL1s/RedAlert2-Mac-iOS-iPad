@@ -10,6 +10,11 @@ import { MissionContext, SupabotContext } from "../../common/context";
 export const MAX_PRIORITY = 100;
 export const PRIORITY_INCREASE_PER_TICK_RATIO = 1.025;
 
+// How far from the defended point free combatants get pulled in from.
+// (Previously the mission's priority (100) was accidentally passed as this
+// radius, conscripting units from across the whole map.)
+const DEFENCE_GRAB_RADIUS = 35;
+
 /**
  * A mission that tries to defend a certain area.
  */
@@ -59,7 +64,7 @@ export class DefenceMission extends Mission<CombatSquad> {
         );
         this.squad.setAttackArea(new Vector2(foundTargets[0].tile.rx, foundTargets[0].tile.ry));
         this.priority = MAX_PRIORITY;
-        return grabCombatants(this.defenceArea, this.priority);
+        return grabCombatants(this.defenceArea, DEFENCE_GRAB_RADIUS);
     }
 
     public getGlobalDebugText(): string | undefined {
@@ -68,6 +73,10 @@ export class DefenceMission extends Mission<CombatSquad> {
 
     public getPriority() {
         return this.priority;
+    }
+
+    public getDefendedPoint(): Vector2 {
+        return this.defenceArea;
     }
 }
 
