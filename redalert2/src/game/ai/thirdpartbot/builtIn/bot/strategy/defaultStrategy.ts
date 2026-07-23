@@ -8,14 +8,17 @@ import { SupabotContext } from "../logic/common/context";
 import { MissionController } from "../logic/mission/missionController";
 import { DebugLogger } from "../logic/common/utils";
 import { Compositions, getValidCompositions, SideComposition } from "./compositionUtils";
+import { AiTriggerDatabase } from "../logic/ai-ini/aiTriggerDb";
 import { EffectiveBotConfig, NORMAL_BOT_PROFILE, resolveBotConfig, BOT_PERSONALITIES } from "../../botProfiles";
+import { Engine } from "@/engine/Engine";
 
 const DEFAULT_CONFIG: EffectiveBotConfig = resolveBotConfig(
     NORMAL_BOT_PROFILE,
     BOT_PERSONALITIES.find((p) => p.id === 'balanced')!,
 );
 
-// These could be loaded from ai.ini
+// Fallback attack compositions, used only when ai(md).ini teams are
+// unavailable (e.g. total conversion mods without an AI database).
 const DEFAULT_COMPOSITIONS: Compositions = {
     conscripts: {
         composition: {
@@ -125,25 +128,67 @@ const DEFAULT_COMPOSITIONS: Compositions = {
     },
 };
 
+function collectCosts(costs: Map<string, number>, rulesMap: any): void {
+    if (!rulesMap) {
+        return;
+    }
+    const entries: Iterable<[string, any]> =
+        rulesMap instanceof Map ? rulesMap.entries() : Object.entries(rulesMap);
+    for (const [name, rules] of entries) {
+        const cost = (rules as any)?.cost;
+        if (typeof cost === "number") {
+            costs.set(name, cost);
+        }
+    }
+}
+
+/**
+ * Parse the retail AI database. Built PER BOT, PER GAME: trigger weights
+ * mutate with team outcomes, so sharing a database between bots (or letting
+ * one outlive a match) would leak state — and cross-client, that's a lockstep
+ * divergence for anyone who played a previous match in the same session.
+ */
+export function buildAiTriggerDatabase(context: SupabotContext): AiTriggerDatabase | null {
+    try {
+        const aiIni = (Engine as any).ai;
+        if (!aiIni) {
+            return null;
+        }
+        const costs = new Map<string, number>();
+        const rulesApi = (context.game as any).rulesApi;
+        collectCosts(costs, rulesApi?.infantryRules);
+        collectCosts(costs, rulesApi?.vehicleRules);
+        collectCosts(costs, rulesApi?.aircraftRules);
+        const db = new AiTriggerDatabase(aiIni, (unitName) => costs.get(unitName) ?? 0);
+        console.log(`[BuiltInBot] ai.ini trigger database: ${db.entries.length} usable attack teams`);
+        return db;
+    } catch (err) {
+        console.warn("[BuiltInBot] failed to parse ai.ini triggers, falling back to static compositions", err);
+        return null;
+    }
+}
+
 export class DefaultStrategy implements Strategy {
     private expansionFactory = new ExpansionMissionFactory();
     private scoutingFactory = new ScoutingMissionFactory();
-    private attackFactory: AttackMissionFactory;
+    private attackFactory: AttackMissionFactory | null = null;
     private defenceFactory = new DefenceMissionFactory();
     private engineerFactory = new EngineerMissionFactory();
 
-    constructor(private config: EffectiveBotConfig = DEFAULT_CONFIG) {
-        this.attackFactory = new AttackMissionFactory(config);
-    }
+    constructor(private config: EffectiveBotConfig = DEFAULT_CONFIG) {}
 
     onAiUpdate(context: SupabotContext, missionController: MissionController, logger: DebugLogger) {
+        if (!this.attackFactory) {
+            // Lazy: the trigger database needs a live game context to resolve
+            // unit costs.
+            this.attackFactory = new AttackMissionFactory(this.config, buildAiTriggerDatabase(context));
+        }
+
         this.expansionFactory.maybeCreateMissions(context, missionController, logger);
         this.scoutingFactory.maybeCreateMissions(context, missionController, logger);
 
-        const composition = this.selectRandomAttackComposition(context, logger);
-        if (composition) {
-            this.attackFactory.maybeCreateMissions(context, missionController, logger, composition);
-        }
+        const fallback = this.selectRandomAttackComposition(context, logger);
+        this.attackFactory.maybeCreateMissions(context, missionController, logger, fallback);
 
         this.defenceFactory.maybeCreateMissions(context, missionController, logger);
         this.engineerFactory.maybeCreateMissions(context, missionController, logger);
@@ -163,8 +208,6 @@ export class DefaultStrategy implements Strategy {
         if (validCompositions.length === 0) {
             return null;
         }
-
-        logger(`Valid compositions: ${validCompositions.join(", ")}`);
 
         const compositionId = this.pickWeightedComposition(context, validCompositions);
         return this.scaleComposition(DEFAULT_COMPOSITIONS[compositionId]);

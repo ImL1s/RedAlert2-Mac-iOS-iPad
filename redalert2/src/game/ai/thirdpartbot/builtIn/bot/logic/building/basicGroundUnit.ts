@@ -28,6 +28,14 @@ export class BasicGroundUnit implements AiBuildingRules {
         return 0;
     }
 
+    /**
+     * Relative weight for background (non-mission) production, used to keep
+     * factories busy with a sensible army mix whenever credits allow.
+     */
+    public getBackgroundWeight(): number {
+        return this.basePriority;
+    }
+
     getMaxCount(
         game: GameApi,
         playerData: PlayerData,

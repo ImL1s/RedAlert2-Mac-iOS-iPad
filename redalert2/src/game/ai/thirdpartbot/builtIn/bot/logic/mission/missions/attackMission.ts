@@ -9,6 +9,8 @@ import { manageMoveMicro } from "./squads/common";
 import { MissionContext, SupabotContext } from "../../common/context";
 import { UnitComposition } from "../../../strategy/strategy";
 import { SideComposition } from "../../../strategy/compositionUtils";
+import { AiTriggerDatabase, AiTriggerEntry } from "../../ai-ini/aiTriggerDb";
+import { EffectiveBotConfig, TargetPreference } from "../../../../botProfiles";
 
 export enum AttackFailReason {
     NoTargets = "NoTargets",
@@ -43,6 +45,7 @@ export class AttackMission extends Mission<AttackFailReason> {
     private state: AttackMissionState = AttackMissionState.Preparing;
     private requestedUnitCount: number;
     private lastRequestedUnitCountDecayAt: number | null = null;
+    private preparingSinceTick: number | null = null;
 
     constructor(
         uniqueName: string,
@@ -52,6 +55,9 @@ export class AttackMission extends Mission<AttackFailReason> {
         private radius: number,
         private composition: SideComposition,
         logger: DebugLogger,
+        // Launch with a partial squad after this long assembling; retail teams
+        // don't wait forever for the perfect roster and neither should we.
+        private launchTimeoutTicks: number = 1350,
     ) {
         super(uniqueName, logger);
         this.squad = new CombatSquad(rallyArea, attackArea, radius);
@@ -71,8 +77,33 @@ export class AttackMission extends Mission<AttackFailReason> {
 
     private handlePreparingState(context: MissionContext) {
         const { game } = context;
+        const currentTick = game.getCurrentTick();
+        if (this.preparingSinceTick === null) {
+            this.preparingSinceTick = currentTick;
+        }
+
+        const timedOut = currentTick > this.preparingSinceTick + this.launchTimeoutTicks;
+        const currentUnits = this.getUnitIds().length;
+        const partialLaunchFloor = Math.max(2, Math.ceil(this.composition.minimumUnits * 0.5));
+
+        if (timedOut) {
+            if (currentUnits >= partialLaunchFloor) {
+                this.logger(`Attack ${this.getUniqueName()} launching after timeout with ${currentUnits} units.`);
+                this.priority = ATTACK_MISSION_INITIAL_PRIORITY;
+                this.state = AttackMissionState.Attacking;
+                return noop();
+            }
+            return disbandMission(AttackFailReason.UnableToAcquireUnits);
+        }
+
         this.decayDesiredCompositionIfNeeded(game);
         if (this.requestedUnitCount < this.composition.minimumUnits) {
+            if (currentUnits >= partialLaunchFloor) {
+                this.logger(`Attack ${this.getUniqueName()} launching with partial squad (${currentUnits}).`);
+                this.priority = ATTACK_MISSION_INITIAL_PRIORITY;
+                this.state = AttackMissionState.Attacking;
+                return noop();
+            }
             return disbandMission(AttackFailReason.UnableToAcquireUnits);
         }
 
@@ -209,16 +240,28 @@ function generateTarget(
     playerData: PlayerData,
     matchAwareness: MatchAwareness,
     includeBaseLocations: boolean = false,
+    targetPreference: TargetPreference = "any",
 ): Vector2 | null {
     // Randomly decide between harvester and base.
     try {
-        const tryFocusHarvester = gameApi.generateRandomInt(0, 1) === 0;
+        const harvesterBias = targetPreference === "harvester" ? 3 : 1;
+        const tryFocusHarvester = gameApi.generateRandomInt(0, 1 + harvesterBias) > 1 - harvesterBias;
         const enemyUnits = gameApi
             .getVisibleUnits(playerData.name, "enemy")
             .map((unitId) => gameApi.getUnitData(unitId))
             .filter((u) => !!u && gameApi.getPlayerData(u.owner).isCombatant) as UnitData[];
 
-        const maxUnit = maxBy(enemyUnits, (u) => getTargetWeight(u, tryFocusHarvester));
+        const weighted = (u: UnitData) => {
+            let weight = getTargetWeight(u, tryFocusHarvester);
+            if (targetPreference === "weakest") {
+                // Prefer targets with few defenders around them.
+                const defenders = matchAwareness.getHostilesNearPoint(u.tile.rx, u.tile.ry, 8).length;
+                weight = weight / (1 + defenders);
+            }
+            return weight;
+        };
+
+        const maxUnit = maxBy(enemyUnits, weighted);
         if (maxUnit) {
             return new Vector2(maxUnit.tile.rx, maxUnit.tile.ry);
         }
@@ -263,13 +306,22 @@ export class AttackMissionFactory {
     private readonly visibleTargetCooldownTicks: number;
     private readonly baseAttackCooldownTicks: number;
     private readonly firstAttackAllowedTick: number;
+    private readonly maxPreparing: number;
+    private readonly launchTimeoutTicks: number;
+    private readonly targetPreference: TargetPreference;
     private lastAttackAt: number;
 
-    constructor(profile?: { attackCooldownMultiplier: number; firstAttackDelaySeconds: number }) {
-        const cooldownMultiplier = profile?.attackCooldownMultiplier ?? 1;
+    constructor(
+        private config?: EffectiveBotConfig,
+        private triggerDb?: AiTriggerDatabase | null,
+    ) {
+        const cooldownMultiplier = config?.attackCooldownMultiplier ?? 1;
         this.visibleTargetCooldownTicks = Math.round(VISIBLE_TARGET_ATTACK_COOLDOWN_TICKS * cooldownMultiplier);
         this.baseAttackCooldownTicks = Math.round(BASE_ATTACK_COOLDOWN_TICKS * cooldownMultiplier);
-        this.firstAttackAllowedTick = (profile?.firstAttackDelaySeconds ?? 0) * TICKS_PER_SECOND;
+        this.firstAttackAllowedTick = (config?.firstAttackDelaySeconds ?? 0) * TICKS_PER_SECOND;
+        this.maxPreparing = config?.maxPreparingAttacks ?? 2;
+        this.launchTimeoutTicks = config?.attackLaunchTimeoutTicks ?? 1350;
+        this.targetPreference = config?.targetPreference ?? "any";
         this.lastAttackAt = -this.visibleTargetCooldownTicks;
     }
 
@@ -277,17 +329,72 @@ export class AttackMissionFactory {
         return "AttackMissionFactory";
     }
 
+    /** Team cost class → personality bias multiplier. */
+    private costBias(entry: AiTriggerEntry): number {
+        const bias = this.config?.teamCostBias;
+        if (!bias) {
+            return 1;
+        }
+        if (entry.totalCost < 2000) {
+            return bias.cheap;
+        }
+        if (entry.totalCost > 5000) {
+            return bias.heavy;
+        }
+        return bias.medium;
+    }
+
+    /**
+     * Pick the attack composition: a retail ai.ini team when the trigger
+     * database has an eligible one, else the legacy hand-rolled composition.
+     */
+    private pickComposition(
+        context: SupabotContext,
+        fallback: SideComposition | null,
+        logger: DebugLogger,
+    ): { composition: SideComposition; triggerEntry: AiTriggerEntry | null } | null {
+        const { game } = context;
+        const playerData = game.getPlayerData(context.player.name);
+        const armySizeMultiplier = this.config?.armySizeMultiplier ?? 1;
+
+        if (this.triggerDb && playerData.country) {
+            const difficulty =
+                this.config?.difficultyId === "easy"
+                    ? "easy"
+                    : this.config?.difficultyId === "brutal"
+                      ? "hard"
+                      : "medium";
+            const buildable = new Set(context.player.production.getAvailableObjects().map((o) => o.name));
+            const pool = this.triggerDb.getEligibleAttackTriggers(game, playerData, difficulty, buildable);
+            const picked = this.triggerDb.pickWeighted(game, pool, (entry) => this.costBias(entry));
+            if (picked) {
+                const totalUnits = picked.taskForce.totalUnits;
+                const composition: SideComposition = {
+                    composition: picked.taskForce.units,
+                    minimumUnits: Math.max(1, Math.ceil(totalUnits * 0.6 * armySizeMultiplier)),
+                    maximumUnits: Math.max(1, Math.ceil(totalUnits * armySizeMultiplier)),
+                };
+                logger(
+                    `Attack team from ai.ini: "${picked.taskForce.name}" (trigger "${picked.trigger.name}", weight ${picked.currentWeight}, pool ${pool.length})`,
+                );
+                return { composition, triggerEntry: picked };
+            }
+        }
+
+        if (fallback) {
+            return { composition: fallback, triggerEntry: null };
+        }
+        return null;
+    }
+
     maybeCreateMissions(
         context: SupabotContext,
         missionController: MissionController,
         logger: DebugLogger,
-        composition: SideComposition,
+        fallbackComposition: SideComposition | null,
     ): void {
         const { game, matchAwareness } = context;
         const playerData = game.getPlayerData(context.player.name);
-        if (!composition) {
-            return;
-        }
 
         if (game.getCurrentTick() < this.firstAttackAllowedTick) {
             return;
@@ -296,22 +403,28 @@ export class AttackMissionFactory {
             return;
         }
 
-        // Limit concurrent preparing attacks to 2.
+        // Cap concurrent assembling attacks (personality-driven multi-prong).
         const preparingCount = missionController
             .getMissions()
             .filter(
                 (mission): mission is AttackMission =>
                     mission instanceof AttackMission && mission.getState() === AttackMissionState.Preparing,
             ).length;
-        if (preparingCount >= 2) {
+        if (preparingCount >= this.maxPreparing) {
             return;
         }
+
+        const picked = this.pickComposition(context, fallbackComposition, logger);
+        if (!picked) {
+            return;
+        }
+        const { composition, triggerEntry } = picked;
 
         const attackRadius = 10;
 
         const includeEnemyBases = game.getCurrentTick() > this.lastAttackAt + this.baseAttackCooldownTicks;
 
-        const attackArea = generateTarget(game, playerData, matchAwareness, includeEnemyBases);
+        const attackArea = generateTarget(game, playerData, matchAwareness, includeEnemyBases, this.targetPreference);
 
         if (!attackArea) {
             return;
@@ -319,6 +432,7 @@ export class AttackMissionFactory {
 
         const squadName = "attack_" + game.getCurrentTick();
 
+        const triggerDb = this.triggerDb;
         const tryAttack = missionController.addMission(
             new AttackMission(
                 squadName,
@@ -328,12 +442,19 @@ export class AttackMissionFactory {
                 attackRadius,
                 composition,
                 logger,
+                this.launchTimeoutTicks,
             ).withOnFinish((unitIds, reason) => {
                 logger(
                     `Attack ${squadName} (${JSON.stringify(composition)}) with ${
                         unitIds.length
                     } units finished with reason: ${reason}`,
                 );
+                // Retail-style trigger feedback: cleared the area = success,
+                // died or never assembled = failure. Failed teams fade from
+                // the pool; successful ones get picked again.
+                if (triggerDb && triggerEntry) {
+                    triggerDb.reportOutcome(triggerEntry, reason === AttackFailReason.NoTargets);
+                }
                 missionController.addMission(
                     new RetreatMission(
                         "retreat-from-" + squadName + game.getCurrentTick(),

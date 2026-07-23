@@ -252,6 +252,10 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["YAGRND", new BasicBuilding(1, 1, 10000)], // Grinder
     ["YADEPT", new BasicBuilding(1, 1, 10000)], // Repair Depot
 
+    ["NAPSIS", new BasicBuilding(10, 1, 500)], // Psychic Sensor (Yuri radar)
+    ["YATECH", new BasicBuilding(20, 1, 4000)], // Yuri Battle Lab
+    ["NACLON", new BasicBuilding(8, 1, 2500)], // Cloning Vats
+
     ["YAGGUN", new AntiGroundStaticDefence(2, 1, 10, 3)], // Gattling Cannon (also AA)
     ["YAPSYT", new AntiGroundStaticDefence(2, 1, 10, 3)], // Psychic Tower
 

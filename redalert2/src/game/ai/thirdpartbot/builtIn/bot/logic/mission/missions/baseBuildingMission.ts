@@ -8,13 +8,24 @@ import {
     DEFAULT_BUILDING_PRIORITY,
     getDefaultPlacementLocation,
 } from "../../building/buildingRules";
+import { AntiGroundStaticDefence } from "../../building/antiGroundStaticDefence";
+import { AntiAirStaticDefence } from "../../building/antiAirStaticDefence";
 import { queueTypeToName } from "../../building/queueController";
+import { EffectiveBotConfig } from "../../../../botProfiles";
+
+// Tier/tech unlock structures: a teching personality rushes these, a rusher
+// deprioritizes them.
+const TECH_STRUCTURE_NAMES = new Set([
+    "GATECH", "NATECH", "YATECH",
+    "GAAIRC", "AMRADR", "NARADR", "NAPSIS", "NACLON",
+]);
 
 // Legacy mission encompassing the old "build queue" logic.
 export class BaseBuildingMission extends Mission {
     constructor(
         private queueType: QueueType,
         logger: DebugLogger,
+        private config?: EffectiveBotConfig,
     ) {
         super(`building-mission-${queueTypeToName(queueType)}`, logger);
     }
@@ -93,7 +104,16 @@ export class BaseBuildingMission extends Mission {
     ) {
         if (BUILDING_NAME_TO_RULES.has(option.name)) {
             let logic = BUILDING_NAME_TO_RULES.get(option.name)!;
-            return logic.getPriority(game, playerStatus, option, threatCache);
+            let priority = logic.getPriority(game, playerStatus, option, threatCache);
+            // Personality flavor: turtles fortify and tech, rushers skip both.
+            if (this.config && priority > 0) {
+                if (logic instanceof AntiGroundStaticDefence || logic instanceof AntiAirStaticDefence) {
+                    priority *= this.config.defensePriorityMultiplier;
+                } else if (TECH_STRUCTURE_NAMES.has(option.name)) {
+                    priority *= this.config.techPriorityMultiplier;
+                }
+            }
+            return priority;
         } else {
             // Fallback priority when there are no rules.
             return (

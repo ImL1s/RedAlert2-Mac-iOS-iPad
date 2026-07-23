@@ -61,7 +61,9 @@ export class BuiltInBot extends Bot {
         if (!this.strategyOverride) {
             this.strategy = new DefaultStrategy(config);
         }
+        this.queueController.setConfig(config);
         this.logBotStatus(`Difficulty "${this.profile.id}", personality "${personality.id}"`);
+        console.log(`[BuiltInBot] "${this.name}" rolled personality "${personality.id}" (difficulty "${this.profile.id}")`);
 
         const myPlayer = game.getPlayerData(this.name);
 
@@ -74,10 +76,11 @@ export class BuiltInBot extends Bot {
         this.missionController.addMission(
             new BaseBuildingMission(QueueType.Structures, (message, sayInGame) =>
                 this.logBotStatus(message, sayInGame),
-            ),
+            config),
         );
         this.missionController.addMission(
-            new BaseBuildingMission(QueueType.Armory, (message, sayInGame) => this.logBotStatus(message, sayInGame)),
+            new BaseBuildingMission(QueueType.Armory, (message, sayInGame) => this.logBotStatus(message, sayInGame),
+            config),
         );
 
         this.matchAwareness = new MatchAwarenessImpl(
@@ -86,6 +89,7 @@ export class BuiltInBot extends Bot {
             null,
             myPlayer.startLocation,
             (message, sayInGame) => this.logBotStatus(message, sayInGame),
+            config.aggressionThreatFactor,
         );
 
         this._debugGridCaches = [

@@ -28,6 +28,11 @@ export class BasicAirUnit implements AiBuildingRules {
         return 0;
     }
 
+    /** See BasicGroundUnit.getBackgroundWeight. */
+    public getBackgroundWeight(): number {
+        return this.basePriority;
+    }
+
     getMaxCount(
         game: GameApi,
         playerData: PlayerData,

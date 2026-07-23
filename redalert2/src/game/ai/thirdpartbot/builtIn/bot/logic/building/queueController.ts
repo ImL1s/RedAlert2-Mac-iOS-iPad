@@ -9,9 +9,12 @@ import {
     Vector2,
 } from "../../../game-api";
 import { GlobalThreat } from "../threat/threat";
-import { TechnoRulesWithPriority, getDefaultPlacementLocation } from "./buildingRules";
+import { BUILDING_NAME_TO_RULES, TechnoRulesWithPriority, getDefaultPlacementLocation } from "./buildingRules";
+import { BasicGroundUnit } from "./basicGroundUnit";
+import { BasicAirUnit } from "./basicAirUnit";
 import { SupabotContext } from "../common/context";
 import { UnitRequest } from "../mission/missionController";
+import { EffectiveBotConfig } from "../../../botProfiles";
 
 export const QUEUES = [
     QueueType.Structures,
@@ -56,12 +59,20 @@ const REPAIR_CHECK_INTERVAL = 30;
 const PLACEMENT_FAILURE_RETRY_THRESHOLD = 3;
 const PLACEMENT_FAILURE_CANCEL_THRESHOLD = 10;
 
+// Unit queues that background production keeps busy.
+const BACKGROUND_PRODUCTION_QUEUES = [QueueType.Infantry, QueueType.Vehicles, QueueType.Aircrafts];
+
 export class QueueController {
     private queueStates: QueueState[] = [];
     private lastRepairCheckAt = 0;
     private placementFailures: Map<string, number> = new Map();
+    private config?: EffectiveBotConfig;
 
     constructor() {}
+
+    public setConfig(config: EffectiveBotConfig): void {
+        this.config = config;
+    }
 
     public onAiUpdate(
         context: SupabotContext,
@@ -106,6 +117,12 @@ export class QueueController {
             );
         });
 
+        // Background army production: never let a factory sit idle while we
+        // can afford units. Missions still outprioritize (their requests own
+        // the topItem slot); this fills the gaps so a standing army is always
+        // growing and attack squads can assemble from free units instantly.
+        this.updateBackgroundProduction(context, threatCache, logger);
+
         // Repair is simple - just repair everything that's damaged.
         if (playerData.credits > 0 && game.getCurrentTick() > this.lastRepairCheckAt + REPAIR_CHECK_INTERVAL) {
             game.getVisibleUnits(playerData.name, "self", (r) => r.repairable).forEach((unitId) => {
@@ -118,6 +135,81 @@ export class QueueController {
                 }
             });
             this.lastRepairCheckAt = game.getCurrentTick();
+        }
+    }
+
+    /**
+     * Queues a personality-weighted unit on any idle unit queue that has no
+     * pending mission request, as long as credits stay above the structure
+     * reserve. Harvester shortfalls take precedence (economy first).
+     */
+    private updateBackgroundProduction(
+        context: SupabotContext,
+        threatCache: GlobalThreat | null,
+        logger: (message: string) => void,
+    ): void {
+        const { game, player } = context;
+        const { production: productionApi, actions: actionsApi } = player;
+        const playerData = game.getPlayerData(player.name);
+        const reserve = this.config?.unitReserveCredits ?? 600;
+        if (playerData.credits <= reserve) {
+            return;
+        }
+        const nameWeights = this.config?.unitNameWeights ?? {};
+
+        for (const queueType of BACKGROUND_PRODUCTION_QUEUES) {
+            const queueData = productionApi.getQueueData(queueType);
+            if (queueData.status !== QueueStatus.Idle) {
+                continue;
+            }
+            const queueState = this.queueStates.find((state) => state.queue === queueType);
+            if (queueState?.topItem) {
+                // A mission requested something here; the normal flow handles it.
+                continue;
+            }
+            const options = productionApi.getAvailableObjects(queueType);
+            const candidates: { unit: TechnoRules; weight: number }[] = [];
+            let explicitBest: { unit: TechnoRules; weight: number } | null = null;
+            for (const option of options) {
+                const rules = BUILDING_NAME_TO_RULES.get(option.name);
+                if (!rules) {
+                    continue;
+                }
+                // Explicit priorities (harvesters when the eco is short) win
+                // outright — economy before army.
+                const explicit = rules.getPriority(game, playerData, option, threatCache);
+                if (explicit > 0) {
+                    if (!explicitBest || explicit > explicitBest.weight) {
+                        explicitBest = { unit: option, weight: explicit };
+                    }
+                    continue;
+                }
+                if (rules instanceof BasicGroundUnit || rules instanceof BasicAirUnit) {
+                    const weight = rules.getBackgroundWeight() * (nameWeights[option.name] ?? 1);
+                    if (weight > 0) {
+                        candidates.push({ unit: option, weight });
+                    }
+                }
+            }
+            if (explicitBest) {
+                actionsApi.queueForProduction(queueType, explicitBest.unit.name, explicitBest.unit.type, 1);
+                continue;
+            }
+            if (candidates.length === 0) {
+                continue;
+            }
+            const weights = candidates.map((c) => Math.max(1, Math.round(c.weight * 10)));
+            const total = weights.reduce((sum, w) => sum + w, 0);
+            let roll = game.generateRandomInt(0, total - 1);
+            let picked = candidates[candidates.length - 1].unit;
+            for (let i = 0; i < candidates.length; i++) {
+                roll -= weights[i];
+                if (roll < 0) {
+                    picked = candidates[i].unit;
+                    break;
+                }
+            }
+            actionsApi.queueForProduction(queueType, picked.name, picked.type, 1);
         }
     }
 

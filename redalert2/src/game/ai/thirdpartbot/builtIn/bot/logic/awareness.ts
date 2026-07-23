@@ -101,6 +101,9 @@ export class MatchAwarenessImpl implements MatchAwareness {
         private threatCache: GlobalThreat | null,
         private mainRallyPoint: Vector2,
         private logger: (message: string, sayInGame?: boolean) => void,
+        // <1 flips to attack mode nearer parity (opportunist), >1 waits for
+        // a clearer edge (turtle).
+        private aggressionFactor: number = 1,
     ) {
         const mapSize = gameApi.mapApi.getRealMapSize();
         const diagonalBounds = getDiagonalMapBounds(gameApi.mapApi);
@@ -236,13 +239,19 @@ export class MatchAwarenessImpl implements MatchAwareness {
 
                 if (!this._shouldAttack) {
                     // If not attacking, make it harder to switch to attack mode by multiplying the opponent's threat.
-                    this._shouldAttack = this.checkShouldAttack(this.threatCache, 1.25 * gameLengthFactor);
+                    this._shouldAttack = this.checkShouldAttack(
+                        this.threatCache,
+                        1.25 * gameLengthFactor * this.aggressionFactor,
+                    );
                     if (this._shouldAttack) {
                         this.logger(`Globally switched to attack mode.`);
                     }
                 } else {
                     // If currently attacking, make it harder to switch to defence mode my dampening the opponent's threat.
-                    this._shouldAttack = this.checkShouldAttack(this.threatCache, 0.75 * gameLengthFactor);
+                    this._shouldAttack = this.checkShouldAttack(
+                        this.threatCache,
+                        0.75 * gameLengthFactor * this.aggressionFactor,
+                    );
                     if (!this._shouldAttack) {
                         this.logger(`Globally switched to defence mode.`);
                     }
