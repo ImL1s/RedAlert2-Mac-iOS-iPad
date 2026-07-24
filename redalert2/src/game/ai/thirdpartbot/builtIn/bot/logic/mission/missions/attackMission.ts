@@ -159,7 +159,7 @@ export class AttackMission extends Mission<AttackFailReason> {
         const foundTargets = matchAwareness
             .getHostilesNearPoint2d(this.attackArea, this.radius)
             .map((unit) => game.getUnitData(unit.unitId))
-            .filter((unit) => !isOwnedByNeutral(unit)) as UnitData[];
+            .filter((unit): unit is UnitData => !!unit && !isOwnedByNeutral(unit));
 
         const update = this.squad.onAiUpdate(context, this, this.logger);
 
@@ -319,10 +319,14 @@ function generateTarget(
     try {
         const harvesterBias = targetPreference === "harvester" ? 3 : 1;
         const tryFocusHarvester = gameApi.generateRandomInt(0, 1 + harvesterBias) > 1 - harvesterBias;
+        // getVisibleUnits("enemy") already filters to combatant owners, and
+        // target scoring only needs the lightweight object data — the old
+        // per-unit getUnitData + getPlayerData pair allocated hundreds of
+        // objects per call.
         let enemyUnits = gameApi
             .getVisibleUnits(playerData.name, "enemy")
-            .map((unitId) => gameApi.getUnitData(unitId))
-            .filter((u) => !!u && gameApi.getPlayerData(u.owner).isCombatant) as UnitData[];
+            .map((unitId) => gameApi.getGameObjectData(unitId))
+            .filter((u): u is UnitData => !!u) as UnitData[];
         // FFA: concentrate on the focus enemy when we can see them.
         if (focusEnemyName) {
             const focused = enemyUnits.filter((u) => u.owner === focusEnemyName);
@@ -710,12 +714,18 @@ export class AttackMissionFactory {
                         unitIds.length
                     } units finished with reason: ${reason}`,
                 );
-                // Retail-style trigger feedback: cleared the area = success;
-                // wiped/repelled/never-assembled = failure. A forced disband
-                // (reason null/undefined, e.g. recalled to defend home) is
-                // NOT a verdict on the composition and reports nothing.
-                if (triggerDb && triggerEntry && reason != null) {
-                    triggerDb.reportOutcome(triggerEntry, reason === AttackFailReason.NoTargets);
+                // Retail-style trigger feedback: only COMBAT outcomes count.
+                // Cleared the area = success; wiped or repelled = failure.
+                // Assembly hiccups (UnableToAcquireUnits — production was
+                // busy) and forced disbands (recalls, stuck pathing) are not
+                // verdicts on the composition: the retail -50 was benching
+                // expensive teams the bot never actually fielded.
+                if (triggerDb && triggerEntry) {
+                    if (reason === AttackFailReason.NoTargets) {
+                        triggerDb.reportOutcome(triggerEntry, true);
+                    } else if (reason === AttackFailReason.OutOfUnits || reason === AttackFailReason.Repelled) {
+                        triggerDb.reportOutcome(triggerEntry, false);
+                    }
                 }
                 missionController.addMission(
                     new RetreatMission(

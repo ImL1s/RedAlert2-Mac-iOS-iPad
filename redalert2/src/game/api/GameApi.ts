@@ -141,23 +141,28 @@ export class GameApi {
         }
         else if (type === "hostile" || type === "enemy") {
             const playerShroud = this.game.mapShroudTrait.getPlayerShroud(player);
-            visibilityFilter = (obj: any) => this.game.map.tileOccupation
-                .calculateTilesForGameObject(obj.tile, obj)
-                .some((tile: any) => !playerShroud?.isShrouded(tile, obj.tileElevation)) &&
-                obj.owner !== player &&
+            // Cheap owner/alliance checks FIRST — the per-object shroud test
+            // walks every foundation tile and dominates the cost of this
+            // query (bots call it constantly).
+            visibilityFilter = (obj: any) => obj.owner !== player &&
                 !this.game.alliances.areAllied(obj.owner, player) &&
-                (type !== "enemy" || obj.owner.isCombatant());
+                (type !== "enemy" || obj.owner.isCombatant()) &&
+                this.game.map.tileOccupation
+                    .calculateTilesForGameObject(obj.tile, obj)
+                    .some((tile: any) => !playerShroud?.isShrouded(tile, obj.tileElevation));
         }
         else {
             throw new Error("Unexpected type " + type);
         }
+        // Rules filter before visibility: name/class predicates are far
+        // cheaper than the shroud walk.
         return this.game
             .getWorld()
             .getAllObjects()
             .filter((obj: any) => obj.isTechno() &&
             !obj.isDestroyed &&
-            visibilityFilter(obj) &&
-            filter(obj.rules))
+            filter(obj.rules) &&
+            visibilityFilter(obj))
             .map((obj: any) => obj.id);
     }
     getGameObjectData(objectId: any): GameObjectData | undefined {

@@ -39,8 +39,14 @@ const SLAVE_MINERS_BY_DIFFICULTY: Record<string, number> = { brutal: 4, normal: 
 const REFINERY_NAMES = new Set(["GAREFN", "NAREFN"]);
 const SLAVE_MINER_NAME = "YAREFN";
 
+// While a structure is in production, the placement search only needs to be
+// fresh when the building actually completes — not every mission pass.
+const QUEUED_PLACEMENT_REFRESH_TICKS = 60;
+
 // Legacy mission encompassing the old "build queue" logic.
 export class BaseBuildingMission extends Mission {
+    private cachedPlacement: { name: string; location: { rx: number; ry: number }; at: number } | null = null;
+
     constructor(
         private queueType: QueueType,
         logger: DebugLogger,
@@ -62,7 +68,25 @@ export class BaseBuildingMission extends Mission {
         const queueData = context.player.production.getQueueData(this.queueType);
         if (queueData.status !== QueueStatus.Idle && queueData.items.length > 0) {
             const current = queueData.items[0].rules;
-            const location = this.getBestLocationForStructure(context.game, playerData, current);
+            // The full placement search (adjacency + crowding scoring over
+            // hundreds of tiles) used to run EVERY pass for the whole
+            // multi-hundred-tick production; refresh it sparsely instead.
+            const currentTick = context.game.getCurrentTick();
+            let location: { rx: number; ry: number } | undefined;
+            if (
+                this.cachedPlacement &&
+                this.cachedPlacement.name === current.name &&
+                currentTick < this.cachedPlacement.at + QUEUED_PLACEMENT_REFRESH_TICKS
+            ) {
+                location = this.cachedPlacement.location;
+            } else {
+                location = this.getBestLocationForStructure(context.game, playerData, current);
+                if (location) {
+                    this.cachedPlacement = { name: current.name, location, at: currentTick };
+                } else {
+                    this.cachedPlacement = null;
+                }
+            }
             if (location) {
                 const priority = Math.max(
                     1,

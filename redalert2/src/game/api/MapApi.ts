@@ -69,6 +69,7 @@ interface ResourceData {
 export class MapApi {
     private game: Game;
     private map: Map;
+    private cachedStartingLocations?: Vector2[];
     constructor(game: Game) {
         this.game = game;
         this.map = game.map;
@@ -77,7 +78,12 @@ export class MapApi {
         return this.map.tiles.getMapSize();
     }
     getStartingLocations() {
-        return this.map.startingLocations.map(loc => new Vector2(loc.x, loc.y));
+        // Starting locations are immutable for the match; getPlayerData calls
+        // this on every invocation, so allocate the vectors once.
+        if (!this.cachedStartingLocations) {
+            this.cachedStartingLocations = this.map.startingLocations.map(loc => new Vector2(loc.x, loc.y));
+        }
+        return this.cachedStartingLocations;
     }
     getTheaterType() {
         return this.map.getTheaterType();

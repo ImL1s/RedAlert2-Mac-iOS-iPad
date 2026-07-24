@@ -293,7 +293,9 @@ export class CombatSquad implements Squad {
                 const nearbyHostiles = matchAwareness
                     .getHostilesNearPoint(attackLeader.tile.rx, attackLeader.tile.ry, ATTACK_SCAN_AREA)
                     .map(({ unitId }) => game.getUnitData(unitId))
-                    .filter((unit) => !isOwnedByNeutral(unit)) as UnitData[];
+                    // Guarded: stale quadtree ids resolve to undefined and
+                    // must not reach the combat math.
+                    .filter((unit): unit is UnitData => !!unit && !isOwnedByNeutral(unit));
 
                 const airUnits = nearUnits.filter((unit) => unit.rules.movementZone === MovementZone.Fly);
                 const squadHasAir = airUnits.length > 0 || nearUnits.some((unit) => unit.zone === ZoneType.Air);
@@ -308,6 +310,14 @@ export class CombatSquad implements Squad {
                         hostile.secondaryWeapon?.projectileRules.isAntiAir,
                 ).length;
                 const airUnsafe = airUnits.length > 0 && localAaCount * 3 > airUnits.length;
+
+                // A PURE-air squad that can't approach must end the mission,
+                // not bounce between rally and target forever: break off so
+                // the trigger pool learns and the units go home properly.
+                if (this.canRetreat && airUnsafe && airUnits.length === nearUnits.length) {
+                    logger(`CombatSquad ${mission.getUniqueName()}: air squad outmatched by AA, breaking off.`);
+                    return disbandMission(SQUAD_REPELLED);
+                }
 
                 // Stuck detection: attacking, nothing to shoot, and the
                 // leader hasn't moved — re-path once, then give up so the
@@ -418,7 +428,15 @@ export class CombatSquad implements Squad {
         const hostiles = matchAwareness
             .getHostilesNearPoint2d(centerOfMass, ATTACK_SCAN_AREA)
             .map(({ unitId }) => game.getUnitData(unitId))
-            .filter((unit): unit is UnitData => !!unit && !isOwnedByNeutral(unit));
+            // Only things that actually fight count toward "losing": unarmed
+            // economy structures inflated enemy power and caused false
+            // Repelled retreats in enemy base assaults.
+            .filter(
+                (unit): unit is UnitData =>
+                    !!unit &&
+                    !isOwnedByNeutral(unit) &&
+                    ((unit.rules as any).isSelectableCombatant || (unit.rules as any).isBaseDefense),
+            );
         if (hostiles.length === 0) {
             return false;
         }

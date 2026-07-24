@@ -39,7 +39,7 @@ export class DefenceMission extends Mission<CombatSquad> {
         const foundTargets = matchAwareness
             .getHostilesNearPoint2d(this.defenceArea, this.radius)
             .map((unit) => game.getUnitData(unit.unitId))
-            .filter((unit) => !isOwnedByNeutral(unit)) as UnitData[];
+            .filter((unit): unit is UnitData => !!unit && !isOwnedByNeutral(unit));
 
         const update = this.squad.onAiUpdate(context, this, this.logger);
 
@@ -111,7 +111,7 @@ export class DefenceMissionFactory {
             const enemiesNearPoint = matchAwareness
                 .getHostilesNearPoint2d(defendablePoint, defendableRadius)
                 .map((unit) => game.getUnitData(unit.unitId))
-                .filter((unit) => !isOwnedByNeutral(unit)) as UnitData[];
+                .filter((unit): unit is UnitData => !!unit && !isOwnedByNeutral(unit));
 
             if (enemiesNearPoint.length > 0) {
                 logger(

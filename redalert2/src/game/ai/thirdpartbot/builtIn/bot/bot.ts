@@ -24,6 +24,7 @@ const NATURAL_TICK_RATE = 15;
 
 export class BuiltInBot extends Bot {
     private tickRatio?: number;
+    private phaseOffset = 0;
     private queueController: QueueController;
     private tickOfLastAttackOrder: number = 0;
     private lastDeployAttemptTick: number = -9999;
@@ -63,6 +64,14 @@ export class BuiltInBot extends Bot {
         const botApm = this.profile.apm;
         const botRate = botApm / 60;
         this.tickRatio = Math.ceil(gameRate / botRate);
+        // Phase-stagger bots so 7 AIs don't all pay their full update on the
+        // SAME tick (a 7x per-frame spike). The name is identical on every
+        // client, so the offset is lockstep-safe.
+        let hash = 0;
+        for (let i = 0; i < this.name.length; i++) {
+            hash = (hash * 31 + this.name.charCodeAt(i)) >>> 0;
+        }
+        this.phaseOffset = hash % this.tickRatio;
 
         const myPlayer = game.getPlayerData(this.name);
 
@@ -131,8 +140,9 @@ export class BuiltInBot extends Bot {
             return;
         }
 
-        // Periodic heartbeat log
-        if (game.getCurrentTick() % 300 === 0) {
+        // Periodic heartbeat log (debug only — console output has real cost
+        // in the WKWebView, and the device log forwarder ships every line).
+        if (this.getDebugMode() && game.getCurrentTick() % 300 === 0) {
             const myPlayer = game.getPlayerData(this.name);
             const conYards = game.getVisibleUnits(this.name, 'self', (r) => r.constructionYard);
             const allUnits = game.getVisibleUnits(this.name, 'self');
@@ -145,7 +155,7 @@ export class BuiltInBot extends Bot {
             this.updateDebugState(game);
         }
 
-        if (game.getCurrentTick() % this.tickRatio! === 0) {
+        if ((game.getCurrentTick() + this.phaseOffset) % this.tickRatio! === 0) {
             this.tryInitialMcvDeploy(game);
 
             try {
@@ -204,10 +214,13 @@ export class BuiltInBot extends Bot {
     // RA1 AI_Raise_Money sell ladder: what a broke bot liquidates, in order.
     // Never production, refineries, power, or defenses — the ladder trades
     // luxury tech for survival cash.
+    // NOTE: GAAIRC/AMRADR deliberately absent — they're the Allied AIRCRAFT
+    // FACTORY (and the USA radar); selling them grounds the air force and
+    // crashes any airborne Harriers.
     private static readonly SELL_LADDER = [
         "GAGAP", "GASPYSAT",
         "GADEPT", "NADEPT", "YADEPT", "YAGRND",
-        "GAAIRC", "AMRADR", "NARADR", "NAPSIS",
+        "NARADR", "NAPSIS",
         "GAWEAT", "GACSPH", "NAMISL", "NAIRON", "YAPPET", "YAGNTC",
         "GATECH", "NATECH", "YATECH",
     ];
@@ -341,7 +354,10 @@ export class BuiltInBot extends Bot {
             if (!unit || !unit.maxHitPoints) {
                 continue;
             }
-            if (unit.hitPoints / unit.maxHitPoints < 0.4 && (unit.rules as any).clickRepairable !== false) {
+            // NOTE: no clickRepairable gate — that flag defaults FALSE for
+            // every vehicle (it's a building concept), and gating on it made
+            // this whole rotation dead code.
+            if (unit.hitPoints / unit.maxHitPoints < 0.4) {
                 this.actionsApi.orderUnits([id], OrderType.Dock, depots[0]);
                 break;
             }
@@ -456,7 +472,12 @@ export class BuiltInBot extends Bot {
         if (!this.enableLogging) {
             return;
         }
-        this.logger.info(message);
+        // Console output only in debug mode — bot chatter at INFO level was
+        // measurable WKWebView overhead (string building + console + the
+        // device log forwarder). The in-memory ring buffer always records.
+        if (this.getDebugMode()) {
+            this.logger.info(message);
+        }
         const timestamp = this.getHumanTimestamp(this.gameApi);
         if (sayInGame) {
             this.actionsApi.sayAll(`${timestamp}: ${message}`);

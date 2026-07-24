@@ -2,7 +2,12 @@ import { GameApi, TechnoRules } from "../../../game-api";
 
 // checking technorules directly reduces the amount of calls to getUnitData(), which is a relatively expensive function.
 // A null value indicates an object that does not have TechnoRules.
-const technoRulesCache: { [rulesName: string]: TechnoRules | null } = {};
+// The cache is keyed by the game's RulesApi instance: rules differ per match
+// (map inis, game-mode overrides), and a module-global cache would serve a
+// PREVIOUS game's TechnoRules — a lockstep divergence for any client whose
+// cache is warm when another client's is cold.
+let cachedRulesApi: any = null;
+let technoRulesCache: { [rulesName: string]: TechnoRules | null } = {};
 
 export const getCachedTechnoRules = (gameApi: GameApi, unitId: any): TechnoRules | null => {
     const gameObject = gameApi.getGameObjectData(unitId);
@@ -10,6 +15,11 @@ export const getCachedTechnoRules = (gameApi: GameApi, unitId: any): TechnoRules
         return null;
     }
     const { rulesApi } = gameApi;
+    if (rulesApi !== cachedRulesApi) {
+        // New game (or first call): drop the previous match's rules.
+        cachedRulesApi = rulesApi;
+        technoRulesCache = {};
+    }
     const { name } = gameObject;
 
     if (technoRulesCache[name]) {

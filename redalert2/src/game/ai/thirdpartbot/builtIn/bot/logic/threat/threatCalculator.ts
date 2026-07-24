@@ -13,43 +13,60 @@ import { GlobalThreat } from "./threat";
 import { getCachedTechnoRules } from "../common/rulesCache";
 
 export function calculateGlobalThreat(game: GameApi, playerData: PlayerData, visibleAreaPercent: number): GlobalThreat {
-    let groundUnits = game.getVisibleUnits(
-        playerData.name,
-        "enemy",
-        (r) => r.type == ObjectType.Vehicle || r.type == ObjectType.Infantry,
-    );
-    let airUnits = game.getVisibleUnits(playerData.name, "enemy", (r) => r.movementZone == MovementZone.Fly);
-    let groundDefence = game
-        .getVisibleUnits(playerData.name, "enemy", (r) => r.type == ObjectType.Building)
-        .filter((unitId) => isAntiGround(game, unitId));
-    let antiAirPower = game
-        .getVisibleUnits(playerData.name, "enemy", (r) => r.type != ObjectType.Building)
-        .filter((unitId) => isAntiAir(game, unitId));
+    // ONE enemy pass + ONE self pass (this used to be 8 world scans — with
+    // multiple bots at a 30-tick cadence it dominated the sim budget).
+    // Each object's firepower is computed once and bucketed into every
+    // category it belongs to.
+    let observedGroundThreat = 0;
+    let observedAirThreat = 0;
+    let observedAntiAirThreat = 0;
+    let observedGroundDefence = 0;
+    for (const unitId of game.getVisibleUnits(playerData.name, "enemy")) {
+        const data = game.getGameObjectData(unitId);
+        if (!data) continue;
+        const rules: any = (data as any).rules;
+        if (!rules) continue;
+        let firepower: number | null = null;
+        const power = () => (firepower ??= calculateFirepowerForUnit(game, data));
+        if (rules.type == ObjectType.Vehicle || rules.type == ObjectType.Infantry) {
+            observedGroundThreat += power();
+        }
+        if (rules.movementZone == MovementZone.Fly) {
+            observedAirThreat += power();
+        }
+        if (rules.type == ObjectType.Building && isAntiGround(game, unitId)) {
+            observedGroundDefence += power();
+        }
+        if (rules.type != ObjectType.Building && isAntiAir(game, unitId)) {
+            observedAntiAirThreat += power();
+        }
+    }
 
-    let ourAntiGroundUnits = game
-        .getVisibleUnits(playerData.name, "self", (r) => r.isSelectableCombatant)
-        .filter((unitId) => isAntiGround(game, unitId));
-    let ourAntiAirUnits = game
-        .getVisibleUnits(playerData.name, "self", (r) => r.isSelectableCombatant || r.type === ObjectType.Building)
-        .filter((unitId) => isAntiAir(game, unitId));
-    let ourGroundDefence = game
-        .getVisibleUnits(playerData.name, "self", (r) => r.type === ObjectType.Building)
-        .filter((unitId) => isAntiGround(game, unitId));
-    let ourAirUnits = game.getVisibleUnits(
-        playerData.name,
-        "self",
-        (r) => r.movementZone == MovementZone.Fly && r.isSelectableCombatant,
-    );
-
-    let observedGroundThreat = calculateFirepowerForUnits(game, groundUnits);
-    let observedAirThreat = calculateFirepowerForUnits(game, airUnits);
-    let observedAntiAirThreat = calculateFirepowerForUnits(game, antiAirPower);
-    let observedGroundDefence = calculateFirepowerForUnits(game, groundDefence);
-
-    let ourAntiGroundPower = calculateFirepowerForUnits(game, ourAntiGroundUnits);
-    let ourAntiAirPower = calculateFirepowerForUnits(game, ourAntiAirUnits);
-    let ourAirPower = calculateFirepowerForUnits(game, ourAirUnits);
-    let ourGroundDefencePower = calculateFirepowerForUnits(game, ourGroundDefence);
+    let ourAntiGroundPower = 0;
+    let ourAntiAirPower = 0;
+    let ourAirPower = 0;
+    let ourGroundDefencePower = 0;
+    for (const unitId of game.getVisibleUnits(playerData.name, "self")) {
+        const data = game.getGameObjectData(unitId);
+        if (!data) continue;
+        const rules: any = (data as any).rules;
+        if (!rules) continue;
+        let firepower: number | null = null;
+        const power = () => (firepower ??= calculateFirepowerForUnit(game, data));
+        const isBuilding = rules.type === ObjectType.Building;
+        if (rules.isSelectableCombatant && isAntiGround(game, unitId)) {
+            ourAntiGroundPower += power();
+        }
+        if ((rules.isSelectableCombatant || isBuilding) && isAntiAir(game, unitId)) {
+            ourAntiAirPower += power();
+        }
+        if (isBuilding && isAntiGround(game, unitId)) {
+            ourGroundDefencePower += power();
+        }
+        if (rules.movementZone == MovementZone.Fly && rules.isSelectableCombatant) {
+            ourAirPower += power();
+        }
+    }
 
     return new GlobalThreat(
         visibleAreaPercent,

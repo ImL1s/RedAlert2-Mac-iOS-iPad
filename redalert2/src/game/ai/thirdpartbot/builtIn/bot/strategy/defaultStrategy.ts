@@ -55,7 +55,7 @@ const DEFAULT_COMPOSITIONS: Compositions = {
     },
     kirovs: {
         composition: {
-            KIROV: 1,
+            ZEP: 1,
         },
         minimumUnits: 1,
         maximumUnits: 3,

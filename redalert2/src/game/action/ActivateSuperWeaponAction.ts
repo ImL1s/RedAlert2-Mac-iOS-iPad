@@ -61,6 +61,13 @@ export class ActivateSuperWeaponAction extends Action {
         const tile2 = this.tile2
             ? this.game.map.tiles.getByMapCoords(this.tile2.x, this.tile2.y)
             : undefined;
+        // ChronoSphere requires a destination: a stale/off-map tile2 would
+        // throw inside deterministic tick processing (crash/desync) — drop
+        // the malformed action instead.
+        if (this.superWeaponType === SuperWeaponType.ChronoSphere && !tile2) {
+            console.warn(`ChronoSphere activation without a valid destination tile; ignored`);
+            return;
+        }
         this.game.traits
             .get(SuperWeaponsTrait)
             .activateSuperWeapon(this.superWeaponType, player, this.game, tile, tile2);

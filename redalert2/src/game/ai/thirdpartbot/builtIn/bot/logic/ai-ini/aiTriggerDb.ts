@@ -393,6 +393,23 @@ export class AiTriggerDatabase {
         buildableUnits: Set<string>,
     ): AiTriggerEntry[] {
         const mySide = sideTypeToTriggerSide(playerData.country!.side);
+        // Precompute the world census ONCE: per-trigger conditions used to
+        // issue a full-world scan each (a burst of 40-120 scans per pass).
+        const enemyCounts = new Map<string, number>();
+        for (const id of game.getVisibleUnits(playerData.name, "enemy")) {
+            const rules: any = (game.getGameObjectData(id) as any)?.rules;
+            if (rules?.name) {
+                enemyCounts.set(rules.name, (enemyCounts.get(rules.name) ?? 0) + 1);
+            }
+        }
+        const selfCounts = new Map<string, number>();
+        for (const id of game.getVisibleUnits(playerData.name, "self")) {
+            const rules: any = (game.getGameObjectData(id) as any)?.rules;
+            if (rules?.name) {
+                selfCounts.set(rules.name, (selfCounts.get(rules.name) ?? 0) + 1);
+            }
+        }
+        const enemies = this.getEnemies(game, playerData);
         return this.entries.filter((entry) => {
             const { trigger, taskForce } = entry;
             if (trigger.isBaseDefense) return false;
@@ -404,8 +421,40 @@ export class AiTriggerDatabase {
             if (difficulty === "hard" && !trigger.enabledInHard) return false;
             if (entry.currentWeight <= 0) return false;
             if (!Object.keys(taskForce.units).every((name) => buildableUnits.has(name))) return false;
-            return this.evaluateCondition(game, playerData, entry.trigger);
+            return this.evaluateConditionCached(game, playerData, entry.trigger, enemyCounts, selfCounts, enemies);
         });
+    }
+
+    private evaluateConditionCached(
+        game: GameApi,
+        playerData: PlayerData,
+        trigger: AiTrigger,
+        enemyCounts: Map<string, number>,
+        selfCounts: Map<string, number>,
+        enemies: PlayerData[],
+    ): boolean {
+        const { conditionType, conditionObject, comparatorValue, comparatorOp } = trigger;
+        switch (conditionType) {
+            case -1:
+                return true;
+            case 0:
+                return compare(enemyCounts.get(conditionObject) ?? 0, comparatorOp, comparatorValue);
+            case 1:
+                return compare(selfCounts.get(conditionObject) ?? 0, comparatorOp, comparatorValue);
+            case 2:
+            case 3: {
+                const factor = conditionType === 2 ? 1 : 0.5;
+                return enemies.some((enemy) => enemy.power.total < enemy.power.drain * factor);
+            }
+            case 4:
+                return enemies.some((enemy) => compare(enemy.credits, comparatorOp, comparatorValue));
+            case 5:
+                return this.ownSuperweaponCharged(game, playerData.name, 1 /* IronCurtain */);
+            case 6:
+                return this.ownSuperweaponCharged(game, playerData.name, 3 /* ChronoSphere */);
+            default:
+                return false;
+        }
     }
 
     /** Weighted deterministic pick; returns null on an empty pool. */
@@ -441,44 +490,6 @@ export class AiTriggerDatabase {
             entry.trigger.maxWeight,
             Math.max(entry.trigger.minWeight, entry.currentWeight + delta),
         );
-    }
-
-    private evaluateCondition(game: GameApi, playerData: PlayerData, trigger: AiTrigger): boolean {
-        const { conditionType, conditionObject, comparatorValue, comparatorOp } = trigger;
-        switch (conditionType) {
-            case -1:
-                return true;
-            case 0: {
-                // Enemy house owns N of object (aggregated over all enemies).
-                const count = game.getVisibleUnits(playerData.name, "enemy", (r) => r.name === conditionObject).length;
-                return compare(count, comparatorOp, comparatorValue);
-            }
-            case 1: {
-                const count = game.getVisibleUnits(playerData.name, "self", (r) => r.name === conditionObject).length;
-                return compare(count, comparatorOp, comparatorValue);
-            }
-            case 2:
-            case 3: {
-                // Enemy low power (yellow / red).
-                const factor = conditionType === 2 ? 1 : 0.5;
-                return this.getEnemies(game, playerData).some((enemy) => {
-                    return enemy.power.total < enemy.power.drain * factor;
-                });
-            }
-            case 4: {
-                return this.getEnemies(game, playerData).some((enemy) =>
-                    compare(enemy.credits, comparatorOp, comparatorValue),
-                );
-            }
-            case 5:
-                // Retail: Iron Curtain charged to AIMinorSuperReadyPercent (0.7).
-                return this.ownSuperweaponCharged(game, playerData.name, 1 /* IronCurtain */);
-            case 6:
-                return this.ownSuperweaponCharged(game, playerData.name, 3 /* ChronoSphere */);
-            default:
-                // Unhandled (neutral-owns etc.) — don't fire.
-                return false;
-        }
     }
 
     /** Retail AIMinorSuperReadyPercent: charged enough to plan around. */

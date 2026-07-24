@@ -55,6 +55,8 @@ type QueueState = {
     /** sorted in ascending order (last item is the topItem) */
     items: TechnoRulesWithPriority[];
     topItem: TechnoRulesWithPriority | undefined;
+    /** Raw availability for this queue (cached — the engine query is expensive). */
+    options: TechnoRules[];
 };
 
 // Retail [AI] CreditReserve=100: don't wrench-repair below this bank
@@ -75,7 +77,7 @@ const BACKGROUND_PRODUCTION_QUEUES = [QueueType.Infantry, QueueType.Vehicles, Qu
 // Counter-composition: when the enemy census skews air/armor/infantry, these
 // names get a production boost (side-agnostic sets; unavailable names are
 // simply never candidates).
-const AA_CAPABLE_NAMES = new Set(["GGI", "NASAM", "JUMPJET", "FV", "HTK", "FLAKT", "YTNK", "GATT"]);
+const AA_CAPABLE_NAMES = new Set(["GGI", "NASAM", "JUMPJET", "FV", "HTK", "FLAKT", "YTNK"]);
 const ANTI_ARMOR_NAMES = new Set(["TNKD", "MGTK", "APOC", "DRON", "TTNK", "SHK", "BRUTE", "TELE", "SREF", "V3"]);
 const ANTI_INFANTRY_NAMES = new Set(["DESO", "VIRUS", "SNIPE", "MTNK", "HTNK", "LTNK", "SCHP", "GHOST"]);
 // Our own air units: production backs off as the enemy stacks AA (the other
@@ -187,6 +189,7 @@ export class QueueController {
                 items,
                 // only if the top item has a  priority above zero
                 topItem: topItem && topItem.priority > 0 ? topItem : undefined,
+                options,
             };
         });
         const totalWeightAcrossQueues = this.queueStates
@@ -279,7 +282,9 @@ export class QueueController {
                 // A mission requested something here; the normal flow handles it.
                 continue;
             }
-            const options = productionApi.getAvailableObjects(queueType);
+            // Reuse the availability computed at the top of this update — the
+            // engine recomputes the whole tech tree on every call.
+            const options = queueState?.options ?? productionApi.getAvailableObjects(queueType);
             const candidates: { unit: TechnoRules; weight: number }[] = [];
             let explicitBest: { unit: TechnoRules; weight: number } | null = null;
             for (const option of options) {
