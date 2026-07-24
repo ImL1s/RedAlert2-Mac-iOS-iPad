@@ -78,6 +78,9 @@ const BACKGROUND_PRODUCTION_QUEUES = [QueueType.Infantry, QueueType.Vehicles, Qu
 const AA_CAPABLE_NAMES = new Set(["GGI", "NASAM", "JUMPJET", "FV", "HTK", "FLAKT", "YTNK", "GATT"]);
 const ANTI_ARMOR_NAMES = new Set(["TNKD", "MGTK", "APOC", "DRON", "TTNK", "SHK", "BRUTE", "TELE", "SREF", "V3"]);
 const ANTI_INFANTRY_NAMES = new Set(["DESO", "VIRUS", "SNIPE", "MTNK", "HTNK", "LTNK", "SCHP", "GHOST"]);
+// Our own air units: production backs off as the enemy stacks AA (the other
+// half of the counter-composition loop — stop feeding Kirovs to a flak wall).
+const OWN_AIR_NAMES = new Set(["JUMPJET", "ORCA", "BEAG", "ZEP", "DISK"]);
 const CENSUS_INTERVAL_TICKS = 450;
 
 export class QueueController {
@@ -86,10 +89,11 @@ export class QueueController {
     private placementFailures: Map<string, number> = new Map();
     private config?: EffectiveBotConfig;
     private lastCensusAt = -CENSUS_INTERVAL_TICKS;
-    private counterMultipliers: { aa: number; antiArmor: number; antiInfantry: number } = {
+    private counterMultipliers: { aa: number; antiArmor: number; antiInfantry: number; ownAir: number } = {
         aa: 1,
         antiArmor: 1,
         antiInfantry: 1,
+        ownAir: 1,
     };
     // Retail AIForcePredictionFudge: how badly this difficulty misjudges the
     // enemy army when picking counters (easy bots build the wrong things).
@@ -120,11 +124,12 @@ export class QueueController {
         let air = 0;
         let armor = 0;
         let infantry = 0;
+        let enemyAa = 0;
         let total = 0;
         for (const id of game.getVisibleUnits(player.name, "enemy")) {
             const data = game.getGameObjectData(id);
             const rules: any = data?.rules;
-            if (!rules?.isSelectableCombatant) {
+            if (!rules?.isSelectableCombatant && !rules?.isBaseDefense) {
                 continue;
             }
             total++;
@@ -135,9 +140,12 @@ export class QueueController {
             } else if ((data!.type as any) === ObjectType.Infantry) {
                 infantry++;
             }
+            if (AA_CAPABLE_NAMES.has(rules.name) || rules.name === "NAFLAK" || rules.name === "YAGGUN") {
+                enemyAa++;
+            }
         }
         if (total < 5) {
-            this.counterMultipliers = { aa: 1, antiArmor: 1, antiInfantry: 1 };
+            this.counterMultipliers = { aa: 1, antiArmor: 1, antiInfantry: 1, ownAir: 1 };
             return;
         }
         // Fudge the appraisal per difficulty (retail AIForcePredictionFudge):
@@ -151,10 +159,13 @@ export class QueueController {
         const airFrac = misjudge(air / total);
         const armorFrac = misjudge(armor / total);
         const infFrac = misjudge(infantry / total);
+        const aaFrac = misjudge(enemyAa / total);
         this.counterMultipliers = {
             aa: Math.min(2.5, 1 + airFrac * 3),
             antiArmor: Math.min(2, 1 + armorFrac * 1.2),
             antiInfantry: Math.min(2, 1 + infFrac * 1.2),
+            // Heavy enemy AA discourages building more of our own air.
+            ownAir: Math.max(0.35, 1 - aaFrac * 1.5),
         };
     }
 
@@ -254,6 +265,7 @@ export class QueueController {
             if (AA_CAPABLE_NAMES.has(name)) multiplier *= counters.aa;
             if (ANTI_ARMOR_NAMES.has(name)) multiplier *= counters.antiArmor;
             if (ANTI_INFANTRY_NAMES.has(name)) multiplier *= counters.antiInfantry;
+            if (OWN_AIR_NAMES.has(name)) multiplier *= counters.ownAir;
             return multiplier;
         };
 

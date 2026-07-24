@@ -5,6 +5,8 @@ import {
     GameApi,
     GameMath,
     MovementZone,
+    ObjectType,
+    OrderType,
     PlayerData,
     UnitData,
     Vector2,
@@ -43,6 +45,11 @@ const STANDOFF_MIN_RANGE = 7;
 const WAYPOINT_REFRESH_TICKS = 150;
 const SECTOR_SAMPLE_STEP = 8;
 
+// Stuck detection (OpenRA: ~63 ticks of no leader progress): re-path first,
+// abort the push after repeated strikes.
+const STUCK_CHECK_INTERVAL_TICKS = 90;
+const STUCK_STRIKES_TO_ABORT = 3;
+
 enum SquadState {
     Gathering,
     Attacking,
@@ -73,6 +80,14 @@ export class CombatSquad implements Squad {
 
     private approachWaypoint: Vector2 | null = null;
     private waypointPickedAt: number | null = null;
+
+    // Leader-based movement (OpenRA): the SLOWEST ground unit leads so the
+    // squad arrives as one force instead of a fast-unit dribble.
+    private leaderId: number | null = null;
+    // Stuck detection: leader position + target unchanged => re-path/give up.
+    private lastLeaderTile: { x: number; y: number } | null = null;
+    private lastProgressCheckAt = 0;
+    private stuckStrikes = 0;
 
     /**
      *
@@ -125,28 +140,95 @@ export class CombatSquad implements Squad {
             }
 
             // Only use ground units for center of mass.
-            const groundUnitIds = mission.getUnitsMatchingByRule(
-                game,
-                (r) =>
-                    r.isSelectableCombatant &&
-                    (r.movementZone === MovementZone.Infantry ||
-                        r.movementZone === MovementZone.Normal ||
-                        r.movementZone === MovementZone.InfantryDestroyer),
+            const groundUnits = units.filter(
+                (unit) =>
+                    unit.rules.movementZone === MovementZone.Infantry ||
+                    unit.rules.movementZone === MovementZone.Normal ||
+                    unit.rules.movementZone === MovementZone.InfantryDestroyer,
             );
+            const groundUnitIds = groundUnits.map((unit) => unit.id);
+
+            // Leader election: keep the current leader while it lives; else
+            // the slowest ground unit (everyone can keep up with it),
+            // tie-break lowest id for determinism. Air-only squads follow
+            // their slowest flyer.
+            let leader = units.find((unit) => unit.id === this.leaderId) ?? null;
+            if (!leader) {
+                const pool = groundUnits.length > 0 ? groundUnits : units;
+                leader = pool.reduce<UnitData | null>((best, unit) => {
+                    if (!best) return unit;
+                    const bestSpeed = (best.rules as any).speed ?? 999;
+                    const unitSpeed = (unit.rules as any).speed ?? 999;
+                    if (unitSpeed < bestSpeed || (unitSpeed === bestSpeed && unit.id < best.id)) {
+                        return unit;
+                    }
+                    return best;
+                }, null);
+                this.leaderId = leader?.id ?? null;
+            }
+            const leaderPos = leader ? new Vector2(leader.tile.rx, leader.tile.ry) : null;
 
             if (this.state === SquadState.Gathering) {
                 const requiredGatherRadius = GameMath.sqrt(groundUnitIds.length) * GATHER_RATIO + MIN_GATHER_RADIUS;
+                const gatherPoint =
+                    leaderPos && game.mapApi.getTile(leaderPos.x, leaderPos.y) !== undefined ? leaderPos : centerOfMass;
+                const maxSpread = leaderPos
+                    ? units.reduce(
+                          (max, unit) =>
+                              Math.max(max, new Vector2(unit.tile.rx, unit.tile.ry).distanceTo(leaderPos)),
+                          0,
+                      )
+                    : maxDistance;
+                // Battle Fortress boarding: while the squad assembles, fill
+                // open-topped transports with squad infantry — the fortress
+                // fights with its passengers' guns (OpenTopped) and the foot
+                // troops ride instead of straggling.
+                const fortress = units.find(
+                    (unit) =>
+                        unit.name === "BFRT" &&
+                        (unit.passengerSlotCount ?? 0) < ((unit.passengerSlotMax ?? 0) || 0),
+                );
+                if (fortress) {
+                    const fortressPos = new Vector2(fortress.tile.rx, fortress.tile.ry);
+                    const freeSlots = (fortress.passengerSlotMax ?? 0) - (fortress.passengerSlotCount ?? 0);
+                    const riders = units
+                        .filter(
+                            (unit) =>
+                                (unit.type as any) === ObjectType.Infantry &&
+                                new Vector2(unit.tile.rx, unit.tile.ry).distanceTo(fortressPos) < 15,
+                        )
+                        .slice(0, freeSlots);
+                    if (riders.length > 0) {
+                        // Transport must be idle to accept passengers.
+                        this.submitActionIfNew(
+                            actionBatcher,
+                            BatchableAction.noTarget(fortress.id, OrderType.Stop),
+                            currentTick,
+                        );
+                        for (const rider of riders) {
+                            this.submitActionIfNew(
+                                actionBatcher,
+                                BatchableAction.toTargetId(rider.id, OrderType.EnterTransport, fortress.id),
+                                currentTick,
+                            );
+                        }
+                    }
+                }
+
                 if (
-                    centerOfMass &&
-                    maxDistance &&
-                    game.mapApi.getTile(centerOfMass.x, centerOfMass.y) !== undefined &&
-                    maxDistance > requiredGatherRadius
+                    gatherPoint &&
+                    maxSpread &&
+                    game.mapApi.getTile(gatherPoint.x, gatherPoint.y) !== undefined &&
+                    maxSpread > requiredGatherRadius
                 ) {
                     units.forEach((unit) => {
-                        this.submitActionIfNew(actionBatcher, manageMoveMicro(unit, centerOfMass), currentTick);
+                        if (unit.id === this.leaderId) {
+                            return; // the leader anchors the gather
+                        }
+                        this.submitActionIfNew(actionBatcher, manageMoveMicro(unit, gatherPoint), currentTick);
                     });
                 } else {
-                    logger(`CombatSquad ${mission.getUniqueName()} switching back to attack mode (${maxDistance})`);
+                    logger(`CombatSquad ${mission.getUniqueName()} switching back to attack mode (${maxSpread})`);
                     this.state = SquadState.Attacking;
                     this.waypointPickedAt = null;
                 }
@@ -160,10 +242,13 @@ export class CombatSquad implements Squad {
                 // back to Gathering, so every reinforcement grant dragged the
                 // push off the fight and it yo-yoed across the map.
                 let nearUnits = units;
+                // Anchor on the leader (fall back to center of mass): the
+                // squad's shape follows the slowest unit, not an average that
+                // fast units drag forward.
+                const anchor =
+                    leaderPos && game.mapApi.getTile(leaderPos.x, leaderPos.y) !== undefined ? leaderPos : centerOfMass;
                 const validCenter =
-                    centerOfMass && game.mapApi.getTile(centerOfMass.x, centerOfMass.y) !== undefined
-                        ? centerOfMass
-                        : null;
+                    anchor && game.mapApi.getTile(anchor.x, anchor.y) !== undefined ? anchor : null;
                 if (validCenter) {
                     nearUnits = [];
                     for (const unit of units) {
@@ -210,9 +295,47 @@ export class CombatSquad implements Squad {
                     .map(({ unitId }) => game.getUnitData(unitId))
                     .filter((unit) => !isOwnedByNeutral(unit)) as UnitData[];
 
-                const squadHasAir = nearUnits.some(
-                    (unit) => unit.rules.movementZone === MovementZone.Fly || unit.zone === ZoneType.Air,
-                );
+                const airUnits = nearUnits.filter((unit) => unit.rules.movementZone === MovementZone.Fly);
+                const squadHasAir = airUnits.length > 0 || nearUnits.some((unit) => unit.zone === ZoneType.Air);
+
+                // OpenRA air doctrine: a strike zone is safe for our air only
+                // while local AA x3 < our air count. Otherwise the flyers
+                // break off (rearmable aircraft go home; the rest fall back)
+                // instead of feeding the flak.
+                const localAaCount = nearbyHostiles.filter(
+                    (hostile) =>
+                        hostile.primaryWeapon?.projectileRules.isAntiAir ||
+                        hostile.secondaryWeapon?.projectileRules.isAntiAir,
+                ).length;
+                const airUnsafe = airUnits.length > 0 && localAaCount * 3 > airUnits.length;
+
+                // Stuck detection: attacking, nothing to shoot, and the
+                // leader hasn't moved — re-path once, then give up so the
+                // factory can retarget the whole effort.
+                if (nearbyHostiles.length === 0 && leaderPos) {
+                    if (currentTick > this.lastProgressCheckAt + STUCK_CHECK_INTERVAL_TICKS) {
+                        this.lastProgressCheckAt = currentTick;
+                        if (
+                            this.lastLeaderTile &&
+                            this.lastLeaderTile.x === leaderPos.x &&
+                            this.lastLeaderTile.y === leaderPos.y
+                        ) {
+                            this.stuckStrikes++;
+                            this.waypointPickedAt = null; // force a fresh route
+                            if (this.stuckStrikes >= STUCK_STRIKES_TO_ABORT && this.canRetreat) {
+                                logger(`CombatSquad ${mission.getUniqueName()} is stuck, giving up this push.`);
+                                // Undefined reason: a pathing failure is not a
+                                // verdict on the composition (no weight hit).
+                                return disbandMission(undefined);
+                            }
+                        } else {
+                            this.stuckStrikes = 0;
+                        }
+                        this.lastLeaderTile = { x: leaderPos.x, y: leaderPos.y };
+                    }
+                } else {
+                    this.stuckStrikes = 0;
+                }
 
                 // Threat-aware approach: when no enemies are engaged yet,
                 // route the advance through the least-defended flank.
@@ -224,6 +347,31 @@ export class CombatSquad implements Squad {
                     const last = this.lastOrderGiven[unit.id];
                     const lastTargetGone =
                         last?.action.targetId !== undefined && !game.getUnitData(last.action.targetId);
+
+                    // Air discipline: flyers disengage from AA-heavy zones.
+                    if (airUnsafe && unit.rules.movementZone === MovementZone.Fly) {
+                        if ((unit.rules as any).airportBound) {
+                            // Rearmable aircraft: leave alone when empty (the
+                            // engine flies them home), else pull them back.
+                            if (unit.ammo !== 0) {
+                                this.submitActionIfNew(
+                                    actionBatcher,
+                                    manageMoveMicro(unit, this.rallyArea),
+                                    currentTick,
+                                    lastTargetGone,
+                                );
+                            }
+                        } else {
+                            this.submitActionIfNew(
+                                actionBatcher,
+                                manageMoveMicro(unit, this.rallyArea),
+                                currentTick,
+                                lastTargetGone,
+                            );
+                        }
+                        continue;
+                    }
+
                     const bestUnit = maxBy(nearbyHostiles, (target) => getAttackWeight(unit, target, squadHasAir));
                     if (bestUnit) {
                         const standOff = this.maybeStandOff(game, unit, nearbyHostiles);

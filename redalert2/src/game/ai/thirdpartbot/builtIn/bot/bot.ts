@@ -37,6 +37,7 @@ export class BuiltInBot extends Bot {
     private lastRepairRotationAt = 0;
     private lastFireSaleCheckAt = 0;
     private fireSaleDone = false;
+    private lastEmergencySellAt = 0;
 
     // Messages to display in visualisation mode only.
     public _debugMessages: string[] = [];
@@ -187,6 +188,7 @@ export class BuiltInBot extends Bot {
                 );
                 this.maybeRecallDefenders(fullContext);
                 this.maybeSendToRepair(fullContext);
+                this.maybeEmergencySell(fullContext);
                 this.maybeFireSale(fullContext);
             }
 
@@ -196,6 +198,53 @@ export class BuiltInBot extends Bot {
             this.queueController.onAiUpdate(fullContext, threatCache, unitTypeRequests, (message) =>
                 this.logBotStatus(message),
             );
+        }
+    }
+
+    // RA1 AI_Raise_Money sell ladder: what a broke bot liquidates, in order.
+    // Never production, refineries, power, or defenses — the ladder trades
+    // luxury tech for survival cash.
+    private static readonly SELL_LADDER = [
+        "GAGAP", "GASPYSAT",
+        "GADEPT", "NADEPT", "YADEPT", "YAGRND",
+        "GAAIRC", "AMRADR", "NARADR", "NAPSIS",
+        "GAWEAT", "GACSPH", "NAMISL", "NAIRON", "YAPPET", "YAGNTC",
+        "GATECH", "NATECH", "YATECH",
+    ];
+
+    /**
+     * RA1-style desperation selling: broke AND no income (harvesters and
+     * refineries gone) -> sell ONE ladder building per pass to fund the
+     * rebuild. Visible drama: the battle lab comes down so the war factory
+     * can keep running.
+     */
+    private maybeEmergencySell(context: SupabotContext): void {
+        if (this.fireSaleDone) {
+            return;
+        }
+        const { game } = context;
+        const currentTick = game.getCurrentTick();
+        if (currentTick < this.lastEmergencySellAt + 450) {
+            return;
+        }
+        this.lastEmergencySellAt = currentTick;
+        const myPlayer = game.getPlayerData(this.name);
+        if (myPlayer.credits >= 100) {
+            return;
+        }
+        const hasIncome =
+            game.getVisibleUnits(this.name, "self", (r) => r.harvester).length > 0 ||
+            game.getVisibleUnits(this.name, "self", (r) => (r as any).refinery).length > 0;
+        if (hasIncome) {
+            return;
+        }
+        for (const name of BuiltInBot.SELL_LADDER) {
+            const owned = game.getVisibleUnits(this.name, "self", (r) => r.name === name);
+            if (owned.length > 0) {
+                this.logBotStatus(`Broke with no income — selling ${name} to refill the war chest.`);
+                this.actionsApi.sellBuilding(owned[0]);
+                return;
+            }
         }
     }
 
