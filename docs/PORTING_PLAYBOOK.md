@@ -483,11 +483,116 @@ answer was one file, not forty.
 
 ---
 
+## 9. Retail-accurate lighting (the audit that ended the guesswork)
+
+A 26-agent audit compared the pipeline against retail byte-for-byte. The
+provenance side came back clean (seeded archives identical to Steam, VXL
+parsing byte-equal to the CNCMaps reference implementation, all four voxel
+normal tables exact). The lighting side did not — and every divergence was a
+compounding "why does it look *slightly* off" report:
+
+- Map `[Lighting]` **ground term was added instead of subtracted** — every
+  Ground-lit map ~10 points too bright.
+- Palette lighting was multiplied in **linear color space**; retail
+  multiplies in gamma/display space. The fix is an exact piecewise-sRGB
+  encode/decode pair inside all three palette shaders (identity at
+  multiplier 1, so unlit pixels are untouched).
+- Voxel shading replaced stock Phong with the retail model:
+  `palette × (0.8 + 1.3·dotNL) × cell light`, diffuse-only. This killed both
+  a π-division brightness cap and phantom specular highlights on tanks.
+- **Invisible lamp buildings**: YR maps scatter `INGALITE`-style lamps that
+  retail never draws — they only cast light. The engine drew a giant
+  additive glow sprite per lamp, washing whole city blocks to white
+  (the long-standing "white patches"). Now: no render, correct radial
+  tile-light contribution using CNCMaps' validated falloff.
+- Units re-sample their cell's light when they change tiles, so a tank
+  driving from a lamp-lit street into darkness actually darkens.
+
+The other lesson: **measure on the device**. The "iPad is brighter than the
+Mac" bug that started all this was *draw order*, not lighting — ground
+sprite layers rendered depth-off in async asset-arrival order, deterministic
+per machine and different between machines. Same-tile pixel sampling on both
+platforms (via an on-device REPL) was the decisive experiment; the fix was a
+painter-order re-sort, not a shader.
+
+## 10. Performance and thermals
+
+The engine rendered at display-rate rAF — 120Hz on ProMotion iPads — and
+walked the scene graph twice per frame. The pass that fixed it, in order of
+impact: frame-rate cap decoupled from the sim (60 default / 30 battery /
+uncapped, menus hard-capped at 30fps), `preserveDrawingBuffer: false` (a
+per-frame framebuffer copy on iOS tile GPUs), `matrixWorldAutoUpdate = false`
+with explicit updates (the renderer was re-walking a graph the scenes had
+already updated — render CPU 4.0→1.8ms), octree re-slot only on tile change,
+and reusable scratch objects in the cull path. Total frame CPU: 6.4→3.6ms.
+
+Profiling gotcha worth keeping: **warm up before you measure**. Renderable
+*creation* cost pollutes first-frame numbers; a "12.9ms movement cost" once
+evaporated after 30 warm-up frames.
+
+## 11. Mid-match save/load on a lockstep engine
+
+A save is not a snapshot — it's the **action log up to the saved tick**,
+stored through the replay system. Loading recreates the game with the same
+RNG seeds and resimulates the log at maximum speed, then hands control back
+with the recorder still appending (so re-saving carries full history).
+
+The trap that made this real engineering: the replay format stores the game
+timestamp as uint32 *seconds*, but games were created with `Date.now()`
+*milliseconds* — and the timestamp seeds the RNG. Every load would have
+silently diverged. Fix: second-align the creation timestamp so the seed
+round-trips exactly. If you build on a deterministic engine, **anything that
+touches a seed must survive its own serialization format.**
+
+## 12. The AI campaign
+
+The stock bot idled behind three war factories and rushed the same
+conscripts every game. Five passes rebuilt it; the details are a story about
+*sources* as much as code:
+
+1. **Structural fixes + the retail database.** Army production existed only
+   as attack-mission requests (≤2 assembling, decaying to cancellation) —
+   hence idle factories and money piles. Background production fixed the
+   economy of it; the *content* came from the retail `aimd.ini`: 132
+   TaskForces / 165 AITriggerTypes parsed straight out of the shipped mix,
+   with conditions, per-difficulty enables, and win/loss weight feedback.
+   Each team's ScriptTypes are also parsed for **intent** — harvester
+   hunters hunt harvesters, and the 34 guard/MCV teams stop being thrown
+   across the map as "attacks".
+2. **Superweapons + squads that fight like they mean it.** A superweapon
+   officer (cluster-targeted nukes/storms/dominators, iron curtain on its
+   own push, chronoshift with safe-landing checks, paradrops into fights,
+   anti-superweapon Force Shield rolls) plus retreat-when-losing squads,
+   artillery stand-off, and threat-aware approach waypoints.
+3. **Variety as a system.** Personality (tempo) × doctrine (tools) ×
+   opening book × ±40% weight jitter × a per-match trigger mask, plus
+   country signatures and ~20 restored roster units with micro-roles.
+   Counter-composition census closes the loop against the human.
+4. **EA's own source.** RA1's `HOUSE.CPP` and Generals' skirmish AI replaced
+   guesses with retail values — and the probed `rulesmd.ini` [AI] knobs
+   outranked both ancestors where they disagreed. Equally important was the
+   **do-not-port list**: literal retail team delays would have gutted the
+   pacing; several knobs are parsed-but-dead in RA2 itself.
+5. **Backports + hardening.** OpenRA-style leader squads and air discipline,
+   spy infiltration (battle-lab stolen tech), BFRT boarding, the RA1
+   sell-ladder and fire-sale — then a 19-agent adversarial review: 14
+   confirmed findings fixed (a dead repair path, a cross-game rules-cache
+   determinism leak, pure-air squads bouncing forever off AA) and the sim
+   made 2.2× faster. Measured: 0.6–0.9ms/tick with **seven** AI opponents.
+
+Two recurring disciplines made this workable on a lockstep engine: every
+random choice goes through the game PRNG (never `Math.random`), and every
+piece of mutable AI state lives per-bot-per-game — the one module-level
+cache that violated this was a genuine cross-client desync waiting to
+happen.
+
+---
+
 ## Appendix: reproducing an asset build
 
 ```sh
-RA2_RETAIL_DIR=/path/to/your/ra2/install bun scripts/prepare-gameres.ts
-./scripts/build-ios.sh --device        # needs RA2_TEAM_ID for signing
+./scripts/setup.sh "/path/to/your/ra2/install"   # deps + verify + import
+./scripts/build-ios.sh --device                  # needs RA2_TEAM_ID for signing
 ```
 
 `prepare-gameres.ts` is the source of truth for what the app ships and how it's

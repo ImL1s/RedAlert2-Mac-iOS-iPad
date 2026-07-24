@@ -25,7 +25,16 @@ import { VirtualFile } from "../redalert2/src/data/vfs/VirtualFile";
 import { ImageUtils } from "../redalert2/src/engine/gfx/ImageUtils";
 import { mixDatabase } from "../redalert2/src/engine/mixDatabase";
 
-const RETAIL = process.env.RA2_RETAIL_DIR ?? `${process.env.HOME}/Documents/cnc-ra2/cnc-ra2/steam-retail`;
+const RETAIL = process.env.RA2_RETAIL_DIR ?? "";
+if (!RETAIL) {
+    console.error(
+        "RA2_RETAIL_DIR is not set.\n\n" +
+            "Point it at your own Red Alert 2 install (the folder containing ra2.mix), e.g.:\n" +
+            '  RA2_RETAIL_DIR="/path/to/steamapps/common/Command & Conquer Red Alert 2" bun scripts/prepare-gameres.ts\n\n' +
+            "Or use the friendly wrapper: ./scripts/setup.sh <path>",
+    );
+    process.exit(1);
+}
 const ROOT = join(import.meta.dir, "..");
 const OUT = join(ROOT, "gameres-export");
 const TMP = join(OUT, ".tmp");
