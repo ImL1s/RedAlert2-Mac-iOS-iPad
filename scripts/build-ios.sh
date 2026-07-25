@@ -49,7 +49,10 @@ if [[ "$VARIANT" == "ra2" ]]; then
   export RA2_APP_NAME="${RA2_APP_NAME:-Red Alert 2}"
 else
   export RA2_BUNDLE_ID="${RA2_BUNDLE_ID:-com.ammaar.ra2web}"
-  export RA2_APP_NAME="${RA2_APP_NAME:-Yuri's Revenge}"
+  # Assigned separately: an apostrophe inside ${VAR:-default} breaks bash's
+  # parameter expansion even within double quotes.
+  if [[ -z "${RA2_APP_NAME:-}" ]]; then RA2_APP_NAME="Yuri's Revenge"; fi
+  export RA2_APP_NAME
 fi
 
 if [[ $SKIP_WEB -eq 0 ]]; then
