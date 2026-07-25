@@ -153,8 +153,18 @@ export class ReturnOreTask extends Task {
         const oreValue = harvesterTrait.ore * this.game.rules.getTiberium(TiberiumType.Ore).value +
             harvesterTrait.gems * this.game.rules.getTiberium(TiberiumType.Gems).value;
         this.target.owner.credits += oreValue;
-        const purifierCount = [...this.target.owner.buildings].filter((building: any) => building.rules.orePurifier &&
+        let purifierCount = [...this.target.owner.buildings].filter((building: any) => building.rules.orePurifier &&
             (!building.poweredTrait || !this.target.owner.powerTrait?.isLowPower())).length;
+        // Retail AIVirtualPurifiers=4,2,0: AI houses refine ore as if they
+        // owned extra Ore Purifiers, scaled by difficulty (brutal +100%,
+        // normal +50% at PurifierBonus=0.25). This is THE hidden economy
+        // bonus that lets retail's brutal AI field endless armies without
+        // literally printing money. Deterministic: derived from immutable
+        // player state, identical on every lockstep client.
+        if (this.target.owner.isAi) {
+            const difficulty = (this.target.owner as any).aiDifficulty;
+            purifierCount += difficulty === 0 ? 4 : difficulty === 4 ? 2 : 0; // AiDifficulty.Brutal=0, Normal=4
+        }
         const purifierBonus = this.game.rules.general.purifierBonus;
         this.target.owner.credits += purifierCount * Math.floor(oreValue * purifierBonus);
         harvesterTrait.ore = 0;

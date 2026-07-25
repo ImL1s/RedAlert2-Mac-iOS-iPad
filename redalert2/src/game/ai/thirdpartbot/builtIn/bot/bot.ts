@@ -175,6 +175,7 @@ export class BuiltInBot extends Bot {
 
         if ((game.getCurrentTick() + this.phaseOffset) % this.tickRatio! === 0) {
             this.tryInitialMcvDeploy(game);
+            this.tryInitialGuardOrders(game);
 
             try {
                 this.matchAwareness.onAiUpdate(this.context);
@@ -432,6 +433,29 @@ export class BuiltInBot extends Bot {
             `Base under heavy attack (${hostilesNearBase} hostiles vs ${defenderCount} defenders) — recalling ${weakest.getUniqueName()}.`,
         );
         this.missionController.disbandMission(weakest.getUniqueName());
+    }
+
+    /**
+     * Starting units (lobby Unit Count > 0) belong to no mission, and nothing
+     * orders them until an attack composition happens to request their type —
+     * so they stood idle even while the base was being razed. One Guard order
+     * at game start makes the engine auto-engage anything in range; missions
+     * freely re-task them later.
+     */
+    private initialGuardIssued = false;
+    private tryInitialGuardOrders(game: GameApi): void {
+        if (this.initialGuardIssued) {
+            return;
+        }
+        this.initialGuardIssued = true;
+        const starters = game.getVisibleUnits(
+            this.name,
+            "self",
+            (r) => r.isSelectableCombatant && !r.deploysInto && !r.harvester && !r.engineer,
+        );
+        if (starters.length > 0) {
+            this.actionsApi.orderUnits(starters, OrderType.Guard);
+        }
     }
 
     private tryInitialMcvDeploy(game: GameApi): void {

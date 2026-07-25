@@ -339,8 +339,18 @@ export class MissionController {
     }
 
     private updateRequestedUnitTypes(missingUnitTypeToHighestRequest: Record<string, UnitRequestWithMission>) {
-        // Decay the priority over time.
+        // Decay the priority over time. STRUCTURE requests (they carry a
+        // specificLocation) are the exception: structure queues build ONE item
+        // and the mission re-emits its request on every pass while it still
+        // wants the building — a request that was NOT renewed this pass is by
+        // definition stale, and letting it linger through the decay window is
+        // exactly how a second battle lab gets queued in the gap after the
+        // first one places.
         for (const [unitType, currentRequest] of this.requestedUnitTypes.entries()) {
+            if (currentRequest.specificLocation && !(unitType in missingUnitTypeToHighestRequest)) {
+                this.requestedUnitTypes.delete(unitType);
+                continue;
+            }
             const newPriority =
                 currentRequest.priority * MISSING_UNIT_TYPE_REQUEST_DECAY_MULT_RATE -
                 MISSING_UNIT_TYPE_REQUEST_DECAY_FLAT_RATE;
