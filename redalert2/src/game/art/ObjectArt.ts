@@ -250,10 +250,16 @@ export class ObjectArt {
     // Set once per game from the loaded map's theater (see GameLoader);
     // AlternateArcticArt only swaps in the "A" art on Snow maps in retail.
     static inSnowTheater: boolean = false;
-    // Voxel rotor sections for rotorcraft whose art has no Rotors= key
-    // (Siege Chopper: main + tail rotor cylinders, same layout as SHAD).
+    // Voxel rotor sections for rotorcraft whose art has no Rotors= key.
+    // RA2/YR animate helicopter rotors in the exe, so retail art has NO
+    // Rotor* keys at all — these are the section names read out of the
+    // shipped .vxl files. SHAD (Nighthawk) was the one the Siege Chopper
+    // entry was modelled on and was never actually added, so the Allied
+    // chopper had no rotors registered and fell back to the raw 2-frame
+    // HVA toggle: a ~36 degree twitch that reads as "not spinning".
     private static readonly DEFAULT_ROTORS = new Map<string, string[]>([
         ["SCHP", ["CYLINDER19", "CYLINDER57"]],
+        ["SHAD", ["CYLINDER18", "CYLINDER09"]],
     ]);
     get imageName(): string {
         return (this.image || this.rules.imageName) +
