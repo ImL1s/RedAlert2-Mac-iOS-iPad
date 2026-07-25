@@ -201,9 +201,21 @@ export class BaseBuildingMission extends Mission {
                 } else if (TECH_STRUCTURE_NAMES.has(option.name)) {
                     priority *= this.config.techPriorityMultiplier * (this.config.matchDoctrine?.doctrine.techPriorityMultiplier ?? 1);
                 }
-                // Cash-rich: convert the bank into parallel production.
-                if (PRODUCTION_STRUCTURE_NAMES.has(option.name) && playerStatus.credits > CASH_RICH_THRESHOLD) {
-                    priority *= 2;
+                // Parallel production is only worth building when the economy
+                // can actually FEED it: a second war factory bought while poor
+                // sits idle (the queue starves even one factory) and reads as
+                // a pointless duplicate. With money it is a real +25% build
+                // speed (retail MultipleFactory=0.8) plus delivery overflow.
+                if (PRODUCTION_STRUCTURE_NAMES.has(option.name)) {
+                    const owned = game.getVisibleUnits(playerStatus.name, "self", (r) => r.name === option.name).length;
+                    if (owned >= 1 && playerStatus.credits < 1500) {
+                        // Transient zero — re-evaluated when the bank recovers.
+                        return 0;
+                    }
+                    // Cash-rich: convert the bank into parallel production.
+                    if (playerStatus.credits > CASH_RICH_THRESHOLD) {
+                        priority *= 2;
+                    }
                 }
                 // Opening book shapes the first minutes of the match.
                 const doctrine = this.config.matchDoctrine;
