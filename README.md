@@ -106,9 +106,11 @@ repainted every one; the engine was using the RA2 palette — hence the
 "16-bit-looking" load screens).
 
 ### Making the AI worth playing
-The centerpiece. The stock bot idled behind three war factories, rushed the
-same conscripts every game, and once built twenty bio reactors. It took five
-research-driven passes to get to retail-worthy:
+The centerpiece, and the longest fight in the project. The stock bot idled
+behind three war factories, rushed the same conscripts every game, and once
+built twenty bio reactors. Five research-driven passes built the systems —
+and then a sixth pass discovered that several of them had never actually
+been running:
 
 1. **Diagnosis + the retail database.** The root causes were structural (army
    units were only ever built when an attack mission requested them). The fix
@@ -146,10 +148,45 @@ research-driven passes to get to retail-worthy:
    infiltration (battle lab = stolen-tech units), Battle Fortress boarding,
    and the RA1 desperation sell-ladder.
 
-Then a 19-agent adversarial review swept all of it: 14 confirmed findings
-fixed (including a cross-game determinism leak and a dead repair path) and
-the simulation made **2.2× faster** — measured at 0.6–0.9ms/tick with seven
-AI opponents in an 8-player free-for-all, roughly 2% of one iPad core.
+6. **Finding out none of it was on.** A 19-agent review fixed 14 real bugs
+   and made the sim 2.2× faster — and the AI still played badly on device.
+   The reason is the most useful thing this project learned: **a bot that
+   does nothing throws nothing.** Error-free soak tests and per-tick
+   profiling both passed while large parts of the AI were inert. Three
+   defects were switching it off. A lobby validator written before "Brutal"
+   existed silently demoted every saved Brutal slot to Easy. A mission gate
+   nested a global `tick % 3` inside a per-bot phase-offset update —
+   arithmetic that, for most bots, is *never simultaneously true*, so they
+   ran no missions, no attacks and no superweapons for entire matches. And a
+   "failsafe" meant to unstick a dead bot queued buildings behind the real
+   queue controller's back, falling through to "extra power is always
+   useful" — forever. That single line is the true origin of the twenty bio
+   reactors, and its queue/cancel war with the real controller burned the
+   economy that should have been buying tanks.
+
+Then a 198-agent adversarial audit went looking for the rest, and confirmed
+72 findings across eleven dimensions. The pattern repeated: the same dead-gate
+arithmetic had also silenced the threat model for seven bots in eight (so
+defenses stopped at one of each type and nobody expanded); attack squads
+disbanded on their *first* update because a no-target timer started at zero;
+tech and superweapons scaled their desire by *current cash* while a healthy
+bot spends to zero, so those requests never formed; the war factory kept
+buying harvesters because miners outweighed tanks in the background pool;
+artillery was missing from that pool entirely; and bot reaction speed was
+derived from the wall clock against the game-speed slider, making every
+difficulty six times more sluggish per tick at the iPad's default speed than
+in the lab. Retail's hidden AI economy bonus (`AIVirtualPurifiers` — brutal
+refines ore at +100%) was simply never wired.
+
+The fix that matters most isn't in that list: **liveness is now asserted, not
+assumed.** `scripts/ai-liveness-probe.js` runs a mixed-difficulty match
+headlessly and fails the build if any bot stops thinking, stops forming
+attack waves, never projects force away from home, spams one structure, or
+accumulates queue cancels — and the iOS build script refuses `--device`
+without that sign-off. Alongside it is a habit rather than a tool: watch the
+game. Reveal the map, pan the camera onto each bot's base, screenshot it
+minute by minute, and judge it the way a player does. Every remaining issue
+in this list was found that way, not by a counter.
 
 ### Making it cool (thermally)
 Frame-rate caps with the sim decoupled (60/30/uncapped graphics option,

@@ -627,6 +627,120 @@ to a queue the main system owns; and measure liveness, not just errors.
 
 ---
 
+## 14. The audit that found the other seventy-two
+
+Chapter 13 covers three bugs that made the AI look broken. Fixing them was
+not enough, and the reason is worth writing down: **fixing what you found
+tells you nothing about what you did not.** So the next pass was an
+exhaustive one — 198 agents across eleven dimensions (the new code in both
+languages, the difficulty matrix, a hunt for more dead gates, determinism,
+the production state machine, combat missions, all three factions, memory and
+performance, audio and UI, and the engine API surface), with every candidate
+finding handed to independent adversarial verifiers whose job was to refute
+it. 72 survived.
+
+The most valuable dimension was "hunt for more unreachable logic", because
+the dead-gate bug turned out to be a *class*, not an incident:
+
+- `awareness.ts` had three more `tick % N === 0` gates nested inside the
+  phase-offset bot update. By the Chinese remainder theorem those bodies are
+  reachable only when `gcd(N, tickRatio)` divides that bot's phase offset —
+  so in a seven-bot lobby exactly one bot ever computed a threat cache,
+  moved its rally point, or received expansion candidates. Everything
+  downstream inherited the silence: with a null threat cache every static
+  defence fell into a ramp that stops at **one copy per type**, which is why
+  the per-difficulty defence budgets never bound and why bases looked naked.
+
+Other confirmed findings, each a small mechanism with a large gameplay
+shadow:
+
+- **Attack squads disbanded on their first update.** The no-target timeout
+  compared against a timer that was never initialised at launch, so any wave
+  aimed at an unexplored base (which is *by construction* not visible)
+  dissolved the tick it launched — and the trigger database recorded that as
+  a win, raising the weight of the composition that never fought.
+- **Tech never entered the queue.** Battle labs and superweapons scale their
+  desire by floating credits, and a healthy bot spends to zero every pass.
+  The savings mechanism that should have accumulated the cash was
+  NaN-poisoned (`0 + undefined` across six production queues, one of which
+  never has a request), which made both the pause and the resume conditions
+  permanently false. Two bugs hiding each other.
+- **The war factory bought miners.** Harvesters inherited the highest weight
+  in the background vehicle pool and had no cap there, so once the explicit
+  economy rule was satisfied they kept winning the roll. Artillery, meanwhile,
+  was excluded from that pool by a missing `instanceof`, so the personality
+  and doctrine weights written specifically to field V3s were inert.
+- **Difficulty was diluted by the speed slider.** Bot cadence derived from
+  real-time APM against `getTickRate()`, while every pacing constant in the
+  bot is expressed in raw ticks — so at the lobby's default speed every
+  difficulty thought roughly six times more slowly per game tick than it did
+  in the lab. This is the single best explanation for why headless numbers
+  disagreed with how the game felt on a device.
+- **Retail's hidden AI economy was missing.** `AIVirtualPurifiers` (brutal 4,
+  normal 2) makes AI houses refine ore as though they owned extra Ore
+  Purifiers — +100% and +50% at retail's `PurifierBonus`. That, not cheating
+  income, is how retail's brutal AI affords its army.
+
+Two engine-level hazards from the same audit are worth carrying into any
+project like this. First, **`constructor.name` does not survive minification**:
+a predicate that recognised attack tasks by class name was dead in every
+release build while working perfectly in dev — the fix is a `Symbol.for`
+marker on the class. (The same hazard still exists in save-state keys built
+from trait class names; a minifier bump would silently invalidate saves.)
+Second, **dropping a CPU-side texture copy is not free**: after upload it
+looks like pure profit, until a WebGL context loss makes three.js re-upload
+every texture from `image.data` and every sprite in the game turns
+transparent. Atlases now rebuild their pixel copies on context restore.
+
+## 15. How to QA a game you cannot see
+
+The uncomfortable lesson of chapters 13 and 14 is that this project's
+automated tests kept passing while the game played badly. Two practices
+closed that gap, and they are the ones to keep:
+
+**Assert liveness, not absence of errors.** `scripts/ai-liveness-probe.js`
+runs a mixed-difficulty match headlessly and checks that each bot is *doing
+things a player would notice*: the difficulty it was given is the profile it
+actually runs, its update/mission/queue loops fire at the expected cadence,
+waves launch with bounded gaps, the base grows and stays varied, no structure
+exceeds its cap, queue cancels stay inside a budget, and per-bot cost stays
+under the device budget. All three chapter-13 regressions fail it.
+`scripts/build-ios.sh` refuses `--device` unless the run is signed off with
+`RA2_LIVENESS_OK=1`.
+
+**Then actually watch.** Counters cannot tell you that a base looks wrong.
+The routine, all through the debug REPL in the desktop lab:
+
+1. Reveal the map for the observing player.
+2. Pan the camera onto each bot's construction yard —
+   `MapPanningHelper.computeCameraPanFromTile` is the only correct way to get
+   from a tile to a camera position; raw world coordinates are not pan
+   coordinates.
+3. After stepping ticks headlessly, pump `renderer.update()` and
+   `renderer.render()` before each screenshot (the render loop is suspended
+   while the pane is not compositing).
+4. Detect superweapon launches by polling each house's timers — a timer that
+   jumps *up* has just fired — then pan to the impact.
+5. Look at the screenshots as a player: is the base coherent, are there
+   duplicate structures, is there a defence line, what is actually in the
+   army, do waves arrive.
+
+That loop found the duplicate battle labs (a request that outlived the
+mission that made it), the war factory count (which turned out to be a
+literal `maxNeeded = 3` in the original table), and the idle starting units
+(they belong to no mission, so nothing ever ordered them — they now get a
+Guard order at game start). None of those were visible in any metric being
+collected at the time.
+
+A closing note on tuning philosophy, learned from a playtester's correction:
+caps are a poor substitute for judgement. Banning the second war factory
+"fixed" duplicates and made the AI worse — the engine genuinely rewards a
+second factory with +25% build speed (retail `MultipleFactory=0.8`) and
+delivery overflow. The right rule was not a smaller cap but an economic
+precondition: build the second factory when the bank can feed it.
+
+---
+
 ## Appendix: reproducing an asset build
 
 ```sh
