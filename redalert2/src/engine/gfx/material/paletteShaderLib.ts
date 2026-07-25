@@ -44,27 +44,23 @@ varying vec3 vInstanceExtraLight;
 #endif
 
 // Retail lighting multiplies the palette's stored (display-referred) bytes
-// directly. The palette texture is sRGB-tagged, so sampling hardware-decodes
-// to linear; ra2ToPaletteSpace restores the stored values so every lighting
-// multiply below happens in the same domain as the original engine, and
-// ra2FromPaletteSpace (see paletteOutputFrag) inverts it again right before
-// the renderer's sRGB output encode — the pair cancels exactly.
-vec3 ra2ToPaletteSpace( vec3 c ) {
-    return mix( c * 12.92, 1.055 * pow( c, vec3( 1.0 / 2.4 ) ) - 0.055, step( vec3( 0.0031308 ), c ) );
-}
-vec3 ra2FromPaletteSpace( vec3 c ) {
-    return mix( c / 12.92, pow( ( c + 0.055 ) / 1.055, vec3( 2.4 ) ), step( vec3( 0.04045 ), c ) );
-}
+// directly, so this whole shader works in the palette's own byte domain: the
+// palette texture is untagged (TextureUtils.textureFromPalBitmap), every
+// lighting multiply below happens on the stored value, and the result is
+// written to the drawing buffer as-is with no output encode. Do not
+// reintroduce an sRGB decode/encode pair around it — that round trip is the
+// identity and costs nine pow() per fragment.
 `,
     paletteColorFrag: `
   float paletteColorIndex;
 
+  // Every index texture bound as the diffuse map is single-channel R8, so the
+  // palette index always arrives in .r. Deliberately not behind a #define:
+  // MergedSpriteMesh and InstancedMesh clone their material, and
+  // THREE.Material.copy() does not copy the defines object, so a per-material
+  // flag would be dropped on exactly the batched meshes that matter.
   #ifdef USE_MAP
-  #ifdef USE_RED_INDEX
   paletteColorIndex = sampledDiffuseColor.r;
-  #else
-  paletteColorIndex = sampledDiffuseColor.a;
-  #endif
   #endif
 
   #ifdef USE_COLOR
@@ -85,10 +81,13 @@ vec3 ra2FromPaletteSpace( vec3 c ) {
   diffuseColor.a *= opacity;
   #endif
   diffuseColor = clamp(diffuseColor, 0.0, 1.0);
-  diffuseColor.rgb = ra2ToPaletteSpace(diffuseColor.rgb);
 `,
+    // Replaces three's <colorspace_fragment>, not prepended to it: the value is
+    // already in output space. The clamp is load-bearing — <premultiplied_alpha_fragment>
+    // runs next and MapShroudLayer draws premultiplied with MultiplyBlending, so a
+    // value above 1 would change the blend result.
     paletteOutputFrag: `
-  gl_FragColor.rgb = ra2FromPaletteSpace(clamp(gl_FragColor.rgb, 0.0, 1.0));
+  gl_FragColor.rgb = clamp(gl_FragColor.rgb, 0.0, 1.0);
 `,
     paletteBasicLightFragment: `
   #ifdef INSTANCE_TRANSFORM

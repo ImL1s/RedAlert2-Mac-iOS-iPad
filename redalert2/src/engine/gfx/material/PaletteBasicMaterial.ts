@@ -30,7 +30,13 @@ const PaletteBasicShader = {
             paletteShaderLib.paletteBasicLightFragment,
             paletteShaderLib.vertexColorMultFrag,
         ].join("\n"))
-        .replace("#include <colorspace_fragment>", paletteShaderLib.paletteOutputFrag + "\n#include <colorspace_fragment>"),
+        // Drops the output encode entirely — palette shading already produces
+        // display-referred bytes. Safe only while nothing renders a palette
+        // material into a WebGLRenderTarget (three forces outputColorSpace to
+        // LinearSRGB for those, which would leave the result un-encoded), and
+        // while there is no scene fog: <fog_fragment> follows this chunk and
+        // would otherwise mix in the palette-byte domain.
+        .replace("#include <colorspace_fragment>", paletteShaderLib.paletteOutputFrag),
 };
 export class PaletteBasicMaterial extends THREE.MeshBasicMaterial {
     uniforms: any;
@@ -69,7 +75,7 @@ export class PaletteBasicMaterial extends THREE.MeshBasicMaterial {
             delete this.defines.USE_VERTEX_COLOR_MULT;
         }
     }
-    constructor({ palette, paletteCount, paletteOffset, extraLight, useVertexColorMult, flatShading, useRedIndex, ...options }: any = {}) {
+    constructor({ palette, paletteCount, paletteOffset, extraLight, useVertexColorMult, flatShading, ...options }: any = {}) {
         if (options.side === undefined) {
             options.side = THREE.DoubleSide;
         }
@@ -92,10 +98,6 @@ export class PaletteBasicMaterial extends THREE.MeshBasicMaterial {
         }
         this.vertexShader = PaletteBasicShader.vertexShader;
         this.fragmentShader = PaletteBasicShader.fragmentShader;
-        if (useRedIndex) {
-            this.defines = this.defines || {};
-            this.defines.USE_RED_INDEX = '';
-        }
         this.type = "PaletteBasicMaterial";
         this.onBeforeCompile = (shader: any) => {
             shader.uniforms = THREE.UniformsUtils.merge([shader.uniforms, this.uniforms]);

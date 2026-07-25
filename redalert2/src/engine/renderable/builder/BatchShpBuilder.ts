@@ -32,6 +32,21 @@ export class BatchShpBuilder {
     private positionAttribute?: THREE.BufferAttribute;
     private colorMultAttribute?: THREE.BufferAttribute;
     private firstFreeSpriteIdx: number = -1;
+    /**
+     * High-water mark of occupied slots. The geometry is preallocated for
+     * `batchSize` (10,000) sprites, so without a draw range the GPU walks the
+     * whole 120k-index buffer every frame no matter how few sprites are live —
+     * a typical layer uses a few hundred.
+     */
+    private usedSlots: number = 0;
+    private getDrawCount(): number {
+        return SpriteUtils.USE_INDEXED_GEOMETRY
+            ? this.usedSlots * this.trianglesPerSprite * 3
+            : this.usedSlots * this.verticesPerSprite;
+    }
+    private applyDrawRange(): void {
+        this.mesh?.geometry.setDrawRange(0, this.getDrawCount());
+    }
     get verticesPerSprite(): number {
         return SpriteUtils.VERTICES_PER_SPRITE;
     }
@@ -130,6 +145,8 @@ export class BatchShpBuilder {
         mesh.matrixAutoUpdate = false;
         mesh.frustumCulled = false;
         this.mesh = mesh;
+        this.usedSlots = spriteIndex;
+        this.applyDrawRange();
         return mesh;
     }
     add(item: BatchItem): void {
@@ -147,6 +164,10 @@ export class BatchShpBuilder {
                 const nextFreeIndex = (this.positionAttribute?.array as Float32Array)[spriteIndex * this.verticesPerSprite * 3];
                 this.setSpecGeometry(item, geometry, spriteIndex);
                 this.firstFreeSpriteIdx = nextFreeIndex;
+                if (spriteIndex >= this.usedSlots) {
+                    this.usedSlots = spriteIndex + 1;
+                    this.applyDrawRange();
+                }
             }
             else {
                 this.specIndexes.set(item, undefined);
@@ -233,6 +254,8 @@ export class BatchShpBuilder {
         }
         this.positionAttribute!.needsUpdate = true;
         this.colorMultAttribute!.needsUpdate = true;
+        this.usedSlots = spriteIndex;
+        this.applyDrawRange();
     }
     remove(item: BatchItem): void {
         if (this.specIndexes.has(item)) {
@@ -243,6 +266,13 @@ export class BatchShpBuilder {
                 let posArray = this.positionAttribute!.array as Float32Array;
                 posArray[spriteIndex * this.verticesPerSprite * 3] = this.firstFreeSpriteIdx;
                 this.firstFreeSpriteIdx = spriteIndex;
+                // Reclaim the trailing slot so layers that never resort (the
+                // shadow builders) still shrink instead of staying pinned at
+                // their peak for the rest of the match.
+                if (spriteIndex === this.usedSlots - 1) {
+                    this.usedSlots = spriteIndex;
+                    this.applyDrawRange();
+                }
             }
             this.specIndexes.delete(item);
         }

@@ -12,12 +12,28 @@ interface SeedManifest {
 }
 
 /**
+ * Both debug channels below talk to a hardcoded dev host over plain HTTP: the
+ * log mirror fires a fetch() per console call, and the REPL polls at 0.5 Hz for
+ * the life of the process and eval()s whatever the LAN hands back. Neither may
+ * survive into a build a player runs — quite apart from the eval, a forever
+ * 0.5 Hz radio wakeup is ~20-70 mW of sustained average power that never lets
+ * the Wi-Fi part reach its low-power state.
+ *
+ * Gate on build mode rather than an ambient env var, so no build path can
+ * reship them by accident. Vite folds `import.meta.env.DEV` to `false` in a
+ * production build, which lets rollup drop both function bodies (and the host
+ * string literals with them, so grepping dist/ is a meaningful check).
+ */
+const DEBUG_NET_ALLOWED = !!(import.meta as any).env?.DEV
+    || !!(import.meta as any).env?.VITE_DEBUG_NET_FORCE;
+
+/**
  * Debug aid: mirrors console output to a dev machine over HTTP so WKWebView
  * logs are visible without attaching Safari's inspector. Silently inert when
  * no dev receiver is listening.
  */
 export function installShellDebugLog(): void {
-    if (!isNativeShell())
+    if (!isNativeShell() || !DEBUG_NET_ALLOWED)
         return;
     // Only active when a receiver host was baked in at build time. Without
     // this gate, release builds fire one fetch() per console call at an
@@ -71,7 +87,9 @@ export function installShellDebugLog(): void {
  * is listening.
  */
 export function installShellRepl(): void {
-    if (!isNativeShell() || !(import.meta as any).env?.VITE_DEBUG_REPL)
+    if (!isNativeShell() || !DEBUG_NET_ALLOWED)
+        return;
+    if (!(import.meta as any).env?.VITE_DEBUG_REPL)
         return;
     const host = (import.meta as any).env?.VITE_DEBUG_LOG_HOST || '127.0.0.1';
     console.log(`[repl] polling http://${host}:4100/cmd`);

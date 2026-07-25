@@ -59,6 +59,7 @@ export class SuperWeaponTimers extends UiComponent<SuperWeaponTimersProps> {
     declare mesh: THREE.Mesh;
     lastUpdate?: number;
     lastHasTimers?: boolean;
+    lastSignature?: string;
     createUiObject() {
         const obj = new UiObject(new THREE.Object3D(), new HtmlContainer());
         obj.setPosition(this.props.x || 0, this.props.y || 0);
@@ -155,8 +156,16 @@ export class SuperWeaponTimers extends UiComponent<SuperWeaponTimersProps> {
                 }
             }
             const hasTimers = !!lines.length;
-            if (hasTimers !== this.lastHasTimers || hasTimers) {
+            // Content only changes when a whole second ticks over (or a flashing
+            // line flips phase), but this ran at 10Hz and re-uploaded the whole
+            // 200x500 canvas each time — on WebKit a canvas upload also forces a
+            // CoreGraphics surface snapshot, so it is far more than a memcpy.
+            const signature = lines
+                .map((l) => l.text + '|' + l.color + '|' + (l.flash ? Math.floor(now / 1000) % 2 : 0))
+                .join('\n');
+            if (hasTimers !== this.lastHasTimers || signature !== this.lastSignature) {
                 this.lastHasTimers = hasTimers;
+                this.lastSignature = signature;
                 this.ctx.clearRect(0, 0, this.props.width, this.props.height);
                 let y = this.props.height - 20;
                 for (const { text, color, flash } of lines) {

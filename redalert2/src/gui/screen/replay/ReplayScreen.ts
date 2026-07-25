@@ -1,3 +1,4 @@
+import { powerFrameCap } from '@/engine/PowerState';
 import { Engine } from '@/engine/Engine';
 import { SidebarModel } from '@/gui/screen/game/component/hud/viewmodel/SidebarModel';
 import { DevToolsApi } from '@/tools/DevToolsApi';
@@ -397,6 +398,9 @@ export class ReplayScreen extends RootScreen {
             skipFrames: true,
             skipBudgetMillis: 8,
             frameLimit: this.generalOptions.graphics.frameLimit,
+            // Live getter, so an OS thermal transition mid-match takes effect on
+            // the very next frame with nothing to subscribe or tear down.
+            frameLimitOverride: { get value() { return powerFrameCap(); } },
             onError: this.config.devMode ? undefined : (error: any, isCritical?: boolean) => this.handleError(error, this.strings.get("TS:GameCrashed") +
                 (isCritical || game.gameOpts.mapOfficial
                     ? ""

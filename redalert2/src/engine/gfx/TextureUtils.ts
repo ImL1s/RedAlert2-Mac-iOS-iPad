@@ -43,7 +43,11 @@ class TextureUtilsClass {
         texture.magFilter = THREE.NearestFilter;
         texture.needsUpdate = true;
         texture.flipY = false;
-        texture.colorSpace = (THREE as any).SRGBColorSpace ?? THREE.LinearSRGBColorSpace;
+        // Untagged on purpose. Retail lighting multiplies the palette's stored
+        // display-referred bytes directly, and the palette materials write their
+        // result straight to the drawing buffer with no output encode, so the
+        // sampler must hand back the raw byte rather than a linearized one.
+        texture.colorSpace = THREE.NoColorSpace;
         return texture;
     }
 }

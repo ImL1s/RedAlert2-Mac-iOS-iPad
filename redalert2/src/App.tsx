@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Application, SplashScreenUpdateCallback } from './Application';
 import SplashScreenComponent from './gui/component/SplashScreen';
 import { installShellDebugLog, installShellRepl, seedGameResFromShell } from './shell/iosSeed';
+import { installPowerStateReceiver } from './engine/PowerState';
 import type { ComponentProps } from 'react';
 function App() {
     const appRef = useRef<Application | null>(null);
@@ -34,6 +35,7 @@ function App() {
                 try {
                     installShellDebugLog();
                     installShellRepl();
+                    installPowerStateReceiver();
                     await seedGameResFromShell();
                     await app.main();
                     console.log('App.tsx: app.main() completed.');

@@ -30,6 +30,12 @@ interface GameAnimationLoopOptions {
     frameLimit?: {
         value: number;
     };
+    // Transient, non-persisted cap composed with frameLimit — the tighter of the
+    // two wins. Used while a full-screen overlay hides the world, and when the
+    // OS reports the device is thermally stressed. 0 = no override.
+    frameLimitOverride?: {
+        value: number;
+    };
     onError?(error: Error, isRenderError?: boolean): void;
 }
 export class GameAnimationLoop {
@@ -96,7 +102,11 @@ export class GameAnimationLoop {
             // drawing is skipped until the next render slot. The half-frame
             // slack keeps a 60 cap rendering every other frame on a 120 Hz
             // display instead of every third.
-            const fpsCap = this.options.frameLimit?.value ?? 0;
+            const userCap = this.options.frameLimit?.value ?? 0;
+            const overrideCap = this.options.frameLimitOverride?.value ?? 0;
+            const fpsCap = overrideCap > 0
+                ? (userCap > 0 ? Math.min(userCap, overrideCap) : overrideCap)
+                : userCap;
             if (fpsCap > 0) {
                 const renderInterval = 1000 / fpsCap;
                 if (timestamp - this.lastRenderTime < renderInterval - 4) {

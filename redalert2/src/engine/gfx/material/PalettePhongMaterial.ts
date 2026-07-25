@@ -25,7 +25,8 @@ const shaderMaterial: ShaderMaterial = {
         .replace("#include <common>", "#include <common>\n" + paletteShaderLib.paletteColorParsFrag)
         .replace("#include <color_fragment>", "#include <color_fragment>\n" + paletteShaderLib.paletteColorFrag)
         .replace("#include <lights_fragment_end>", "#include <lights_fragment_end>\n" + paletteShaderLib.paletteFullLightFragment)
-        .replace("#include <colorspace_fragment>", paletteShaderLib.paletteOutputFrag + "\n#include <colorspace_fragment>"),
+        // See PaletteBasicMaterial: the output encode is dropped, not wrapped.
+        .replace("#include <colorspace_fragment>", paletteShaderLib.paletteOutputFrag),
 };
 export class PalettePhongMaterial extends THREE.MeshPhongMaterial {
     public uniforms: {

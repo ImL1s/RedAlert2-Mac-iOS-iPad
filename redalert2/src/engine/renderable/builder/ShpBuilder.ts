@@ -75,8 +75,8 @@ export class ShpBuilder {
         this.uiAnchorCompensation = enabled;
     }
     useMaterial(texture, palette, transparent) {
-        if (texture.format !== THREE.RGBAFormat) {
-            throw new Error("Texture must have format THREE.RGBAFormat");
+        if (texture.format !== THREE.RedFormat) {
+            throw new Error("Texture must have format THREE.RedFormat");
         }
         this.materialCacheKey = texture.uuid + "_" + palette.uuid + "_" + Number(transparent);
         let cached = ShpBuilder.materialCache.get(this.materialCacheKey);

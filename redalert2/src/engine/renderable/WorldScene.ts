@@ -18,6 +18,22 @@ const SHADOW_QUALITY_MAP = new Map([
     [ShadowQuality.Medium, 4],
     [ShadowQuality.Low, 2]
 ]);
+// Offset from the shadow-casting light to its target. Constant, so the shadow
+// camera's orientation never changes and its basis can be computed once.
+const LIGHT_OFFSET = new THREE.Vector3(-87.012, 204.338, 195.409);
+// World-space slack added around the visible rect so off-screen objects still
+// cast into it. The light extrudes a caster horizontally by ~1.05x its height;
+// 1600 leptons covers the tallest building plus its shadow skirt.
+const SHADOW_CASTER_MARGIN = 1600;
+const ORIGIN = new THREE.Vector3(0, 0, 0);
+const UP = new THREE.Vector3(0, 1, 0);
+const scratchVecA = new THREE.Vector3();
+const scratchVecB = new THREE.Vector3();
+const scratchMat = new THREE.Matrix4();
+const shadowRight = new THREE.Vector3();
+const shadowUp = new THREE.Vector3();
+const shadowBack = new THREE.Vector3();
+let shadowBasisReady = false;
 export class WorldScene extends RenderableContainer {
     public scene: THREE.Scene;
     public camera: THREE.OrthographicCamera;
@@ -129,6 +145,7 @@ export class WorldScene extends RenderableContainer {
         camera.bottom = -d;
         setMeshLineViewportResolution(camera, viewport.width, viewport.height);
         camera.updateProjectionMatrix();
+        this.updateShadowCamera();
     }
     updateCamera(pan: {
         x: number;
@@ -170,7 +187,7 @@ export class WorldScene extends RenderableContainer {
             this.scene.add(axesHelper);
             this.scene.add(this.ambientLight);
             const light = this.directionalLight;
-            light.position.set(-87.012, 204.338, 195.409);
+            light.position.copy(LIGHT_OFFSET);
             if (this.lightFocusPoint) {
                 light.position.x += this.lightFocusPoint.x;
                 light.position.z += this.lightFocusPoint.y;
@@ -178,6 +195,7 @@ export class WorldScene extends RenderableContainer {
                 light.target.updateMatrixWorld(undefined);
             }
             this.updateShadowQuality(light, this.shadowQuality.value);
+            this.updateShadowCamera();
             this.shadowQualityListener = () => this.updateShadowQuality(light, this.shadowQuality.value);
             this.shadowQuality.onChange.subscribe(this.shadowQualityListener);
             this.scene.add(light);
@@ -192,12 +210,7 @@ export class WorldScene extends RenderableContainer {
         light.castShadow = enableShadows;
         if (enableShadows) {
             const worldScale = Coords.ISO_WORLD_SCALE;
-            const shadowSize = 3500 * worldScale;
             const shadowCamera = light.shadow.camera as THREE.OrthographicCamera;
-            shadowCamera.right = shadowSize;
-            shadowCamera.left = -shadowSize;
-            shadowCamera.top = shadowSize;
-            shadowCamera.bottom = -shadowSize;
             shadowCamera.near = -4000 * worldScale;
             shadowCamera.far = 3000 * worldScale;
             const shadowMapMultiplier = SHADOW_QUALITY_MAP.get(quality);
@@ -206,13 +219,80 @@ export class WorldScene extends RenderableContainer {
             }
             // An 8192x8192 depth target is ~537MB of GPU memory — on mobile
             // that single allocation lands at the first world frame and can
-            // get the WKWebView content process killed. 2048 is visually
-            // fine at phone/tablet viewport sizes.
+            // get the WKWebView content process killed.
+            //
+            // The touch clamp is 1024 rather than 2048 because updateShadowCamera()
+            // now fits the ortho box to the visible rect instead of covering 233
+            // tiles of map: texel density is several times higher than it was at
+            // 2048 over the old box, at a quarter of the depth-target bandwidth.
             const isCoarsePointer = typeof window !== 'undefined'
                 && window.matchMedia?.('(pointer: coarse)').matches;
-            const mapSize = Math.min(1024 * shadowMapMultiplier, isCoarsePointer ? 2048 : 8192);
+            const mapSize = Math.min(1024 * shadowMapMultiplier, isCoarsePointer ? 1024 : 8192);
+            if (light.shadow.mapSize.width !== mapSize) {
+                // three only reallocates the depth target when shadow.map is
+                // null, so an existing one has to be dropped explicitly.
+                light.shadow.map?.dispose();
+                (light.shadow as any).map = null;
+            }
             light.shadow.mapSize.width = mapSize;
             light.shadow.mapSize.height = mapSize;
+            this.updateShadowCamera();
+        }
+    }
+    /**
+     * Fits the shadow ortho box to what the camera can actually see and moves
+     * the light with it. The box used to be a fixed 233x233 tiles centred on the
+     * map, so a ~23-tile view got roughly 1% of the depth texels; fitting it
+     * raises texel density by ~40x, which is what pays for the smaller map.
+     *
+     * The box origin is snapped to whole shadow texels along the shadow camera's
+     * own axes. Without that, panning slides the texel grid under static geometry
+     * and every shadow edge crawls.
+     */
+    private updateShadowCamera(): void {
+        const light = this.directionalLight;
+        if (!light.castShadow) {
+            return;
+        }
+        const camera = this.camera;
+        const shadowCamera = light.shadow.camera as THREE.OrthographicCamera;
+        const zoom = camera.zoom || 1;
+        const viewWidth = (camera.right - camera.left) / zoom;
+        const viewHeight = (camera.top - camera.bottom) / zoom;
+        // Diagonal, because the shadow box is not axis-aligned with the view.
+        const half = Math.hypot(viewWidth, viewHeight) / 2 + SHADOW_CASTER_MARGIN;
+        // Ground point at the centre of the view.
+        const dir = camera.getWorldDirection(scratchVecA);
+        const centre = scratchVecB.copy(camera.position);
+        if (Math.abs(dir.y) > 1e-6) {
+            centre.addScaledVector(dir, -camera.position.y / dir.y);
+        }
+        // Shadow camera basis: fixed, because LIGHT_OFFSET never changes.
+        if (!shadowBasisReady) {
+            scratchMat.lookAt(LIGHT_OFFSET, ORIGIN, UP);
+            shadowRight.setFromMatrixColumn(scratchMat, 0);
+            shadowUp.setFromMatrixColumn(scratchMat, 1);
+            shadowBack.setFromMatrixColumn(scratchMat, 2);
+            shadowBasisReady = true;
+        }
+        const texel = (2 * half) / light.shadow.mapSize.width;
+        const u = Math.round(centre.dot(shadowRight) / texel) * texel;
+        const v = Math.round(centre.dot(shadowUp) / texel) * texel;
+        const w = centre.dot(shadowBack);
+        const target = light.target.position
+            .set(0, 0, 0)
+            .addScaledVector(shadowRight, u)
+            .addScaledVector(shadowUp, v)
+            .addScaledVector(shadowBack, w);
+        light.position.copy(target).add(LIGHT_OFFSET);
+        light.updateMatrixWorld(true);
+        light.target.updateMatrixWorld(true);
+        if (shadowCamera.right !== half) {
+            shadowCamera.right = half;
+            shadowCamera.left = -half;
+            shadowCamera.top = half;
+            shadowCamera.bottom = -half;
+            shadowCamera.updateProjectionMatrix();
         }
     }
     setLightFocusPoint(x: number, y: number): void {
@@ -238,6 +318,7 @@ export class WorldScene extends RenderableContainer {
             this.updateCamera(pan, zoom);
             this.lastCameraZoom = zoom;
             this.lastCameraPan = pan;
+            this.updateShadowCamera();
         }
         this._onCameraUpdate.dispatch(this, deltaTime);
         this.scene.updateMatrixWorld(false);

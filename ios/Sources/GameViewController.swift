@@ -7,6 +7,8 @@ final class GameViewController: UIViewController, WKNavigationDelegate {
     /// Monotonic clock, so a device-clock change cannot confuse the loop check.
     private var lastCrashTime: CFTimeInterval = 0
     private var crashNotice: UILabel?
+    private var thermalObserver: NSObjectProtocol?
+    private var lowPowerObserver: NSObjectProtocol?
 
     /// A jetsam kill during the 750MB first-launch seed is deterministic, so an
     /// uncapped reload is an infinite zero-progress loop. Retry a few times
@@ -30,8 +32,14 @@ final class GameViewController: UIViewController, WKNavigationDelegate {
         config.preferences.isElementFullscreenEnabled = true
 
         // Marker the web app uses to detect it is running inside the native shell.
+        // thermalState is the only ground truth the page has for "is this device
+        // getting hot" — JavaScript cannot see the SoC's power state, and timing
+        // heuristics cannot tell throttling apart from a heavy frame.
         let bootstrap = WKUserScript(
-            source: "window.__RA2_SHELL__ = { platform: 'ios', version: '0.1.0' };",
+            source: """
+            window.__RA2_SHELL__ = { platform: 'ios', version: '0.1.0', \
+            thermalState: '\(Self.thermalStateName(ProcessInfo.processInfo.thermalState))' };
+            """,
             injectionTime: .atDocumentStart,
             forMainFrameOnly: true
         )
@@ -61,7 +69,65 @@ final class GameViewController: UIViewController, WKNavigationDelegate {
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
 
+        observeThermalState()
         loadApp()
+    }
+
+    private static func thermalStateName(_ state: ProcessInfo.ThermalState) -> String {
+        switch state {
+        case .nominal: return "nominal"
+        case .fair: return "fair"
+        case .serious: return "serious"
+        case .critical: return "critical"
+        @unknown default: return "unknown"
+        }
+    }
+
+    /// Fires only on thermal / power-mode transitions — a handful of times per
+    /// hour at worst — so it adds no polling and no wakeup source of its own.
+    private func observeThermalState() {
+        let center = NotificationCenter.default
+        thermalObserver = center.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.pushThermalState()
+        }
+        lowPowerObserver = center.addObserver(
+            forName: .NSProcessInfoPowerStateDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.pushThermalState()
+        }
+    }
+
+    /// The document-start script carries the state as of viewDidLoad, so a later
+    /// reload (crash recovery, or the post-seed reload) would otherwise see a
+    /// stale — and optimistically low — value: no transition fires at reload time.
+    private func pushThermalState() {
+        let info = ProcessInfo.processInfo
+        let name = Self.thermalStateName(info.thermalState)
+        let lowPower = info.isLowPowerModeEnabled
+        NSLog("[RA2] thermalState=%@ lowPower=%@", name, lowPower ? "yes" : "no")
+        webView.evaluateJavaScript(
+            """
+            window.__RA2_SHELL__ && (window.__RA2_SHELL__.thermalState = '\(name)');
+            window.__RA2_POWER__ && window.__RA2_POWER__({thermal:'\(name)',lowPower:\(lowPower)});
+            """,
+            completionHandler: nil
+        )
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        pushThermalState()
+    }
+
+    deinit {
+        let center = NotificationCenter.default
+        if let thermalObserver { center.removeObserver(thermalObserver) }
+        if let lowPowerObserver { center.removeObserver(lowPowerObserver) }
     }
 
     private func loadApp(crashed: Bool = false) {

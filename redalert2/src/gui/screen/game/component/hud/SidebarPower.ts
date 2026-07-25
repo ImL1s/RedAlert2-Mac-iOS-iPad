@@ -82,6 +82,7 @@ export class SidebarPower extends UiComponent<SidebarPowerProps> {
     }
     createDataTexture(data: Uint8Array, width: number, height: number): THREE.DataTexture {
         const tex = new THREE.DataTexture(data, width, height, THREE.RedFormat);
+        tex.unpackAlignment = 1;
         tex.needsUpdate = true;
         tex.minFilter = THREE.NearestFilter;
         tex.magFilter = THREE.NearestFilter;
@@ -98,7 +99,6 @@ export class SidebarPower extends UiComponent<SidebarPowerProps> {
             map: this.texture,
             palette: TextureUtils.textureFromPalette(this.props.palette),
             side: THREE.DoubleSide,
-            useRedIndex: true,
         } as any);
         const mesh = new THREE.Mesh(geometry, material);
         mesh.frustumCulled = false;

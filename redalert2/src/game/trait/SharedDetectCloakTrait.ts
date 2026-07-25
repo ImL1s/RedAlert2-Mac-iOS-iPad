@@ -63,6 +63,13 @@ export class SharedDetectCloakTrait {
     }
     [NotifyPower.onPowerChange](object: any, game: any) { }
     [NotifyTick.onTick](game: any) {
+        // detect() only ever loops over this.detectors, so with no global
+        // detector on the field the scan below cannot change anything. It was
+        // walking every object of every player 60 times a second — in most
+        // matches nobody ever builds a psychic sensor at all.
+        if (this.detectors.size === 0) {
+            return;
+        }
         for (const combatant of game.getCombatants()) {
             for (const object of combatant.getOwnedObjects()) {
                 if (object.cloakableTrait && !object.cloakableTrait.isCloaked()) {

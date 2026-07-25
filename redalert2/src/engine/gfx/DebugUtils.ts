@@ -34,6 +34,7 @@ export class DebugUtils {
             }
         }
         const texture = new THREE.DataTexture(bitmap.data, 64, 64, THREE.RedFormat);
+        texture.unpackAlignment = 1;
         texture.needsUpdate = true;
         texture.minFilter = THREE.NearestFilter;
         texture.magFilter = THREE.NearestFilter;

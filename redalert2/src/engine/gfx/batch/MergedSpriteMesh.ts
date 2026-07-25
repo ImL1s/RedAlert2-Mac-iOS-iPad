@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import * as arrayUtils from '../../../util/array';
 import { PaletteBasicMaterial } from '../material/PaletteBasicMaterial';
 const tempVector3 = new THREE.Vector3();
 const tempVector4 = new THREE.Vector4();
@@ -114,7 +113,18 @@ export class MergedSpriteMesh extends THREE.Mesh {
         const targetUVs = uvAttr.array as Float32Array;
         const sourceUVs = sourceAttributes.uv.array as Float32Array;
         const uvStartIndex = 2 * vertexOffset;
-        if (!arrayUtils.equals(Array.from(sourceUVs), Array.from(targetUVs.subarray(uvStartIndex, uvStartIndex + sourceUVs.length)))) {
+        // Scan in place. The old form built two boxed Arrays plus a subarray
+        // view per sprite per frame purely to compare 16 floats — hundreds of
+        // KB of garbage every frame, which is GC (and therefore heat) for a
+        // comparison that allocates nothing here.
+        let uvDiffers = false;
+        for (let i = 0, len = sourceUVs.length; i < len; i++) {
+            if (sourceUVs[i] !== targetUVs[uvStartIndex + i]) {
+                uvDiffers = true;
+                break;
+            }
+        }
+        if (uvDiffers) {
             targetUVs.set(sourceUVs, uvStartIndex);
             uvAttr.needsUpdate = true;
         }

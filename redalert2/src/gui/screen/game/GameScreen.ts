@@ -1,3 +1,4 @@
+import { powerFrameCap } from '@/engine/PowerState';
 import { RootScreen } from '@/gui/screen/RootScreen';
 import { CompositeDisposable } from '@/util/disposable/CompositeDisposable';
 import { MedianPing } from './MedianPing';
@@ -1121,6 +1122,9 @@ export class GameScreen extends RootScreen {
             skipFrames: true,
             skipBudgetMillis: 8,
             frameLimit: this.generalOptions.graphics.frameLimit,
+            // Live getter, so an OS thermal transition mid-match takes effect on
+            // the very next frame with nothing to subscribe or tear down.
+            frameLimitOverride: { get value() { return powerFrameCap(); } },
             onError: this.config.devMode ? undefined : (error: any, isCritical?: boolean) => this.handleError(error, this.strings.get('TS:GameCrashed') +
                 (isCritical || game.gameOpts.mapOfficial
                     ? ''

@@ -504,20 +504,14 @@ export class PipOverlay {
                 bitmap.drawIndexedImage(pipBitmap, xOffset + BORDER_WIDTH, yOffset + BORDER_WIDTH);
             }
         }
-        const rgbaData = new Uint8Array(bitmap.width * bitmap.height * 4);
-        for (let i = 0; i < bitmap.data.length; i++) {
-            const base = i * 4;
-            rgbaData[base] = 0;
-            rgbaData[base + 1] = 0;
-            rgbaData[base + 2] = 0;
-            rgbaData[base + 3] = bitmap.data[i];
-        }
-        const texture = new THREE.DataTexture(rgbaData, bitmap.width, bitmap.height, THREE.RGBAFormat);
+        // R8: the palette shader reads the index from .r, same as every atlas.
+        const texture = new THREE.DataTexture(bitmap.data, bitmap.width, bitmap.height, THREE.RedFormat);
+        texture.unpackAlignment = 1;
         texture.minFilter = THREE.NearestFilter;
         texture.magFilter = THREE.NearestFilter;
         texture.flipY = true;
         texture.needsUpdate = true;
-        (texture as any).colorSpace = (THREE as any).LinearSRGBColorSpace ?? (texture as any).colorSpace;
+        texture.colorSpace = THREE.NoColorSpace;
         return texture;
     }
     private createBuildingSelectionBox(gameObject: GameObject): THREE.Object3D {

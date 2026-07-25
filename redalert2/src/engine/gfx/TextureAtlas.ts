@@ -36,18 +36,10 @@ function createAtlasBitmap(blocks: any[], width: number, height: number, imageRe
     });
     return atlasBitmap;
 }
-function createAtlasRgbaData(bitmap: IndexedBitmap): Uint8Array {
-    const rgbaData = new Uint8Array(bitmap.width * bitmap.height * 4);
-    for (let i = 0; i < bitmap.data.length; i++) {
-        const rgbaIndex = i * 4;
-        const paletteIndex = bitmap.data[i];
-        rgbaData[rgbaIndex] = 0;
-        rgbaData[rgbaIndex + 1] = 0;
-        rgbaData[rgbaIndex + 2] = 0;
-        rgbaData[rgbaIndex + 3] = paletteIndex;
-    }
-    return rgbaData;
-}
+// Atlases carry one payload byte per texel — a palette index the shader reads
+// from .r — so they upload as R8. They used to be expanded to RGBA8 with three
+// hard-zero channels, i.e. 4x the texture memory and 4x the sampler cache
+// footprint for no information.
 export class TextureAtlas {
     /** Every packed atlas still alive, so a context restore can refill them. */
     private static live = new Set<TextureAtlas>();
@@ -89,8 +81,11 @@ export class TextureAtlas {
         const height = packer.root.h;
         const imageRects = new Map<IndexedBitmap, any>();
         const atlasBitmap = createAtlasBitmap(blocks, width, height, imageRects);
-        const rgbaData = createAtlasRgbaData(atlasBitmap);
-        const texture = new THREE.DataTexture(rgbaData, width, height, THREE.RGBAFormat);
+        const texture = new THREE.DataTexture(atlasBitmap.data, width, height, THREE.RedFormat);
+        // One byte per texel, and the packer's atlas width is arbitrary. GL's
+        // default 4-byte row alignment would shred every row whose width is not
+        // a multiple of 4.
+        texture.unpackAlignment = 1;
         texture.needsUpdate = true;
         texture.onUpdate = TextureAtlas.dropCpuCopy as any;
         texture.flipY = true;
@@ -128,7 +123,7 @@ export class TextureAtlas {
             atlasBitmap.drawIndexedImage(image, rect.x, rect.y);
             extrudeEdges(atlasBitmap, rect.x, rect.y, image.width, image.height);
         });
-        (this.texture.image as any).data = createAtlasRgbaData(atlasBitmap);
+        (this.texture.image as any).data = atlasBitmap.data;
         this.texture.onUpdate = TextureAtlas.dropCpuCopy as any;
         this.texture.needsUpdate = true;
     }
