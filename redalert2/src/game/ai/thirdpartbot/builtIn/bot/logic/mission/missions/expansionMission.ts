@@ -319,8 +319,8 @@ const DO_NOT_EXPAND_BEFORE_TICKS = 15 * 60 * 6; // 6 minutes
  * a large part of why attacks never materialised.
  */
 const EXPANSION_UNIT_PRIORITY = 12;
-/** Beyond this, another construction yard is worth less than what it costs. */
-const SOFT_CONYARD_LIMIT = 2;
+/** Hard ceiling regardless of economy — past this it is sprawl, not strategy. */
+const MAX_CONYARDS = 3;
 
 export class ExpansionMissionFactory {
     constructor(private lastConyardPackAt = Number.MIN_VALUE) {}
@@ -348,13 +348,17 @@ export class ExpansionMissionFactory {
                 );
             });
         } else if (expandToCandidates.length > 0) {
-            // Expanding is only worth 3000 credits and a war-factory slot if the
-            // base it would support can actually be fed. Bots were reaching three
-            // construction yards while still on a single refinery.
+            // Expanding with an MCV is a legitimate strategy, so this is an
+            // economic precondition rather than a ban: earn the extra base.
+            // One additional construction yard per two refineries of standing
+            // economy. A bot on a single refinery gets none (that is the case
+            // that looked like MCVs "all over the place" — three construction
+            // yards while still mining with one refinery); a bot running four
+            // refineries can genuinely support three bases.
             const conyards = game.getVisibleUnits(player.name, "self", (r) => r.constructionYard).length;
             const refineries = game.getVisibleUnits(player.name, "self", (r) => r.refinery).length;
-            const canAffordToExpand = conyards < SOFT_CONYARD_LIMIT && refineries >= 2;
-            if (canAffordToExpand) {
+            const affordableConyards = Math.min(MAX_CONYARDS, 1 + Math.floor(refineries / 2));
+            if (conyards < affordableConyards) {
                 mcvs.forEach((mcv) => {
                     missionController.addMission(
                         new ExpansionMission(

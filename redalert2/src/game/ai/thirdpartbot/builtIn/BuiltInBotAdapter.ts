@@ -174,8 +174,24 @@ export class BuiltInBotAdapter extends Bot {
             return;
         }
 
+        // "Income dead": no refinery, no harvester, and nothing left to pay
+        // with. Nothing in this codebase recovers from that state — the sell
+        // ladder spares the conyard and power plant, the fire sale requires
+        // zero production buildings, and the queue controller only cancels
+        // items that reach Ready, which a structure the bot cannot pay for
+        // never does. Worth naming explicitly because the queue in that state
+        // is *Active* (a refinery frozen part-built), so the early return below
+        // used to skip the failsafe entirely on exactly the bots that needed it.
+        const hasRefinery = gameApi.getVisibleUnits(this.name, 'self', (r: any) => r.refinery).length > 0;
+        const hasHarvester = gameApi.getVisibleUnits(this.name, 'self', (r: any) => r.harvester).length > 0;
+        const incomeDead =
+            !hasRefinery &&
+            !hasHarvester &&
+            gameApi.getCurrentTick() > BuiltInBotAdapter.FAIL_SAFE_GRACE_TICKS;
+
         const queueHasItems = Array.isArray(queueData.items) && queueData.items.length > 0;
         if (
+            !incomeDead &&
             queueHasItems &&
             queueData.status !== QueueStatus.Idle &&
             queueData.status !== QueueStatus.OnHold
@@ -199,7 +215,13 @@ export class BuiltInBotAdapter extends Bot {
             'self',
             (r: any) => r.type === ObjectType.Building,
         ).length;
-        const stalledEarly = ownedBuildingCount <= 1 && tick > BuiltInBotAdapter.FAIL_SAFE_GRACE_TICKS;
+        // A raw building count is the wrong test for "stalled": the bot that
+        // prompted this had exactly TWO buildings (conyard + power plant) and so
+        // slipped through a <= 1 check while being completely dead. Income is
+        // the honest signal — a base with no refinery and no miner is not
+        // developing, whatever its structure count.
+        const stalledEarly =
+            (ownedBuildingCount <= 1 || incomeDead) && tick > BuiltInBotAdapter.FAIL_SAFE_GRACE_TICKS;
         if (!recentlyErrored && !stalledEarly) {
             return;
         }

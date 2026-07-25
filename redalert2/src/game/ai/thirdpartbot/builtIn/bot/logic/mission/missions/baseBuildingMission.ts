@@ -87,8 +87,24 @@ export class BaseBuildingMission extends Mission {
             ) {
                 location = this.cachedPlacement.location;
             } else {
-                location = this.getBestLocationForStructure(context.game, playerData, current);
-                if (location) {
+                const fresh = this.getBestLocationForStructure(context.game, playerData, current);
+                if (fresh) {
+                    location = fresh;
+                    this.cachedPlacement = { name: current.name, location: fresh, at: currentTick };
+                } else if (this.cachedPlacement?.name === current.name) {
+                    // A placement miss is usually TRANSIENT — a unit parked on
+                    // the spot, or an adjacency ring that is momentarily full.
+                    // Dropping the location here returned noop(), which deleted
+                    // the mission request, which made the queue controller
+                    // cancel the in-progress structure — and at Ready that
+                    // structure is already 100% PAID FOR. The bot then looped
+                    // build -> pay -> cancel -> refund -> rebuild and never
+                    // landed anything, which is how one ended up with a
+                    // construction yard, a power plant and a refinery frozen at
+                    // 15%. Keep the last known location so the request survives;
+                    // if it is genuinely unplaceable, the engine's own
+                    // placement-failure backoff handles it at Ready.
+                    location = this.cachedPlacement.location;
                     this.cachedPlacement = { name: current.name, location, at: currentTick };
                 } else {
                     this.cachedPlacement = null;
