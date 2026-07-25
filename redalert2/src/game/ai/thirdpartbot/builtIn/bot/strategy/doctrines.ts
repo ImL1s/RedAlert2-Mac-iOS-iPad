@@ -147,13 +147,57 @@ export interface MatchDoctrine {
  * The jitter multiplies EVERY named weight by 0.6-1.4 so even the same
  * personality+doctrine+country fields a different mix next match.
  */
+/**
+ * Personality+doctrine pairs already fielded this match, keyed by the
+ * per-game GameApi instance (BotManager creates one per game), so entries
+ * are per-match and GC with the game. Lockstep-safe: every client rolls
+ * the same bots in the same order, so this set evolves identically on
+ * all clients.
+ */
+const ROLLED_THIS_MATCH: WeakMap<GameApi, Set<string>> = new WeakMap();
+
+export interface MatchIdentityRoll {
+    personalityIndex: number;
+    doctrineIndex: number;
+    openingIndex: number;
+}
+
+/**
+ * Roll personality+doctrine+opening for one bot, biased away from
+ * personality+doctrine pairs earlier bots in this match already took:
+ * up to 2 re-rolls (all draws via game.generateRandomInt — deterministic),
+ * keeping the final roll if every attempt collides. A multi-bot lobby
+ * therefore almost always fields visibly different opponents.
+ */
+export function rollMatchIdentity(game: GameApi, personalityCount: number): MatchIdentityRoll {
+    let taken = ROLLED_THIS_MATCH.get(game);
+    if (!taken) {
+        taken = new Set();
+        ROLLED_THIS_MATCH.set(game, taken);
+    }
+    let personalityIndex = 0;
+    let doctrineIndex = 0;
+    let openingIndex = 0;
+    for (let attempt = 0; attempt < 3; attempt++) {
+        personalityIndex = game.generateRandomInt(0, personalityCount - 1);
+        doctrineIndex = game.generateRandomInt(0, BOT_DOCTRINES.length - 1);
+        openingIndex = game.generateRandomInt(0, OPENING_BOOKS.length - 1);
+        if (!taken.has(`${personalityIndex}:${doctrineIndex}`)) {
+            break;
+        }
+    }
+    taken.add(`${personalityIndex}:${doctrineIndex}`);
+    return { personalityIndex, doctrineIndex, openingIndex };
+}
+
 export function rollMatchDoctrine(
     game: GameApi,
     personalityWeights: Record<string, number>,
     countryName: string | undefined,
+    identity?: MatchIdentityRoll,
 ): MatchDoctrine {
-    const doctrine = BOT_DOCTRINES[game.generateRandomInt(0, BOT_DOCTRINES.length - 1)];
-    const opening = OPENING_BOOKS[game.generateRandomInt(0, OPENING_BOOKS.length - 1)];
+    const doctrine = BOT_DOCTRINES[identity ? identity.doctrineIndex : game.generateRandomInt(0, BOT_DOCTRINES.length - 1)];
+    const opening = OPENING_BOOKS[identity ? identity.openingIndex : game.generateRandomInt(0, OPENING_BOOKS.length - 1)];
 
     const merged: Record<string, number> = {};
     const applyWeights = (weights: Record<string, number>) => {

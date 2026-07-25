@@ -15,7 +15,13 @@ export class GraphicsOptions {
     constructor() {
         this.resolution = new BoxedVar<Resolution | undefined>(undefined);
         this.models = new BoxedVar(ModelQuality.High);
-        this.shadows = new BoxedVar(ShadowQuality.High);
+        // Fresh installs on touch devices default to Medium shadows: the High
+        // shadow map is a huge single GPU allocation, and phones sit much
+        // closer to the WebContent memory limit than desktops. (Users can
+        // still pick High in Options; WorldScene caps the map size on mobile.)
+        const isCoarsePointer = typeof window !== 'undefined'
+            && window.matchMedia?.('(pointer: coarse)').matches;
+        this.shadows = new BoxedVar(isCoarsePointer ? ShadowQuality.Medium : ShadowQuality.High);
         this.frameLimit = new BoxedVar(60);
     }
     unserialize(data: string): this {

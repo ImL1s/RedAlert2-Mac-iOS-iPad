@@ -204,8 +204,15 @@ export class WorldScene extends RenderableContainer {
             if (!shadowMapMultiplier) {
                 throw new Error(`Unsupported shadow quality "${quality}"`);
             }
-            light.shadow.mapSize.width = 1024 * shadowMapMultiplier;
-            light.shadow.mapSize.height = 1024 * shadowMapMultiplier;
+            // An 8192x8192 depth target is ~537MB of GPU memory — on mobile
+            // that single allocation lands at the first world frame and can
+            // get the WKWebView content process killed. 2048 is visually
+            // fine at phone/tablet viewport sizes.
+            const isCoarsePointer = typeof window !== 'undefined'
+                && window.matchMedia?.('(pointer: coarse)').matches;
+            const mapSize = Math.min(1024 * shadowMapMultiplier, isCoarsePointer ? 2048 : 8192);
+            light.shadow.mapSize.width = mapSize;
+            light.shadow.mapSize.height = mapSize;
         }
     }
     setLightFocusPoint(x: number, y: number): void {

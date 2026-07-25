@@ -13,7 +13,7 @@ import { BaseBuildingMission } from "./logic/mission/missions/baseBuildingMissio
 import { SuperweaponOfficer } from "./logic/superweapons";
 import { AttackMission, AttackMissionState } from "./logic/mission/missions/attackMission";
 import { DefenceMission } from "./logic/mission/missions/defenceMission";
-import { rollMatchDoctrine } from "./strategy/doctrines";
+import { rollMatchDoctrine, rollMatchIdentity } from "./strategy/doctrines";
 
 const DEBUG_STATE_UPDATE_INTERVAL_SECONDS = 6;
 
@@ -25,6 +25,7 @@ const NATURAL_TICK_RATE = 15;
 export class BuiltInBot extends Bot {
     private tickRatio?: number;
     private phaseOffset = 0;
+    private botUpdateCount = 0;
     private queueController: QueueController;
     private tickOfLastAttackOrder: number = 0;
     private lastDeployAttemptTick: number = -9999;
@@ -83,9 +84,10 @@ export class BuiltInBot extends Bot {
         // (never Math.random — bots run in lockstep on every client).
         // Personality = tempo, doctrine = tools; jitter + opening book +
         // trigger mask make every match play out differently.
-        const personality = BOT_PERSONALITIES[game.generateRandomInt(0, BOT_PERSONALITIES.length - 1)];
+        const identity = rollMatchIdentity(game, BOT_PERSONALITIES.length);
+        const personality = BOT_PERSONALITIES[identity.personalityIndex];
         const config = resolveBotConfig(this.profile, personality);
-        config.matchDoctrine = rollMatchDoctrine(game, config.unitNameWeights, myPlayer.country.name);
+        config.matchDoctrine = rollMatchDoctrine(game, config.unitNameWeights, myPlayer.country.name, identity);
         if (!this.strategyOverride) {
             this.strategy = new DefaultStrategy(config);
         }
@@ -187,8 +189,14 @@ export class BuiltInBot extends Bot {
                 this.context.player.actions.quitGame();
             }
 
-            // Mission/strategy logic every 3 ticks.
-            if (this.context.game.getCurrentTick() % 3 === 0) {
+            // Mission/strategy logic every 3rd BOT update. This must be a
+            // bot-local counter: gating on global tick % 3 while the update
+            // itself runs on (tick + phaseOffset) % tickRatio === 0 means the
+            // two conditions can be mathematically incompatible (e.g. ratio 9,
+            // offset 5 → bot ticks are always ≡ 1 mod 3) — such bots NEVER ran
+            // missions, strategy, or superweapons and sat idle all game.
+            this.botUpdateCount++;
+            if (this.botUpdateCount % 3 === 0) {
                 this.missionController.onAiUpdate(fullContext);
                 this.strategy = this.strategy.onAiUpdate(fullContext, this.missionController, (message, sayInGame) =>
                     this.logBotStatus(message, sayInGame),

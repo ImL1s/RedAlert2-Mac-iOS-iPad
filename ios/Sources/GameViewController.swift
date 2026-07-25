@@ -1,8 +1,9 @@
 import UIKit
 import WebKit
 
-final class GameViewController: UIViewController {
+final class GameViewController: UIViewController, WKNavigationDelegate {
     private var webView: WKWebView!
+    private var contentProcessCrashCount = 0
 
     override var prefersHomeIndicatorAutoHidden: Bool { true }
     override var prefersStatusBarHidden: Bool { true }
@@ -27,7 +28,10 @@ final class GameViewController: UIViewController {
         config.userContentController.addUserScript(bootstrap)
 
         webView = WKWebView(frame: .zero, configuration: config)
-        webView.isOpaque = false
+        webView.navigationDelegate = self
+        // Opaque: the page always paints a black background, and transparency
+        // costs alpha compositing on the full-screen GPU-process surface.
+        webView.isOpaque = true
         webView.backgroundColor = .black
         webView.scrollView.isScrollEnabled = false
         webView.scrollView.contentInsetAdjustmentBehavior = .never
@@ -47,6 +51,26 @@ final class GameViewController: UIViewController {
             webView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
 
-        webView.load(URLRequest(url: URL(string: "\(BundleSchemeHandler.scheme)://app/index.html")!))
+        loadApp()
+    }
+
+    private func loadApp(crashed: Bool = false) {
+        var urlString = "\(BundleSchemeHandler.scheme)://app/index.html"
+        if crashed {
+            // Let the web app know this boot follows a content-process kill so it
+            // can surface it (memory pressure) instead of looking like a silent reset.
+            urlString += "?crashRecovery=\(contentProcessCrashCount)"
+        }
+        webView.load(URLRequest(url: URL(string: urlString)!))
+    }
+
+    // The web content process was killed (almost always jetsam memory pressure
+    // during game load). Without this handler the view goes blank/limbo; with a
+    // plain reload the user silently loses their session. Reload and mark the
+    // boot as crash recovery.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        contentProcessCrashCount += 1
+        NSLog("[RA2] Web content process terminated (count=%d) — reloading", contentProcessCrashCount)
+        loadApp(crashed: true)
     }
 }

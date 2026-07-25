@@ -10,6 +10,7 @@ import {
 } from "../../building/buildingRules";
 import { AntiGroundStaticDefence } from "../../building/antiGroundStaticDefence";
 import { AntiAirStaticDefence } from "../../building/antiAirStaticDefence";
+import { PowerPlant } from "../../building/powerPlant";
 import { queueTypeToName } from "../../building/queueController";
 import { EffectiveBotConfig } from "../../../../botProfiles";
 
@@ -38,6 +39,9 @@ const EXTRA_REFINERIES_BY_DIFFICULTY: Record<string, number> = { brutal: 2, norm
 const SLAVE_MINERS_BY_DIFFICULTY: Record<string, number> = { brutal: 4, normal: 3, easy: 2 };
 const REFINERY_NAMES = new Set(["GAREFN", "NAREFN"]);
 const SLAVE_MINER_NAME = "YAREFN";
+
+// Safety net: absolute per-type copy cap for non-defense structures.
+const SAME_STRUCTURE_HARD_CAP = 8;
 
 // While a structure is in production, the placement search only needs to be
 // fresh when the building actually completes — not every mission pass.
@@ -88,15 +92,24 @@ export class BaseBuildingMission extends Mission {
                 }
             }
             if (location) {
-                const priority = Math.max(
-                    1,
-                    this.getPriorityForBuildingOption(
-                        current,
-                        context.game,
-                        playerData,
-                        context.matchAwareness.getThreatCache(),
-                    ),
+                const priority = this.getPriorityForBuildingOption(
+                    current,
+                    context.game,
+                    playerData,
+                    context.matchAwareness.getThreatCache(),
                 );
+                // The rule for this structure now says stop (its cap was hit
+                // while it was in production). Do NOT keep requesting it at a
+                // floor priority: the dangling request re-queues the same
+                // structure the moment it completes, before this mission gets
+                // another look at an idle queue — that loop is how a bot ends
+                // up with 7 power plants (or 20 bio reactors) and no barracks.
+                // With no request, the queue controller cancels it at Ready
+                // and the next pass re-evaluates all options honestly.
+                if (priority <= 0) {
+                    this.cachedPlacement = null;
+                    return noop();
+                }
                 return buildStructureAtLocation(current.name, priority, location.rx, location.ry);
             }
             return noop();
@@ -148,6 +161,16 @@ export class BaseBuildingMission extends Mission {
         if (BUILDING_NAME_TO_RULES.has(option.name)) {
             let logic = BUILDING_NAME_TO_RULES.get(option.name)!;
             let priority = logic.getPriority(game, playerStatus, option, threatCache);
+            // Same-structure spam guard (independent of config/personality).
+            // Defenses have the per-difficulty budget below and power plants
+            // have a need-scaled cap; nothing else has a legitimate reason to
+            // exceed this many copies of the SAME structure.
+            if (priority > 0 && !(option as any).isBaseDefense && !(logic instanceof PowerPlant)) {
+                const copies = game.getVisibleUnits(playerStatus.name, "self", (r) => r.name === option.name).length;
+                if (copies >= SAME_STRUCTURE_HARD_CAP) {
+                    return 0;
+                }
+            }
             // Personality flavor: turtles fortify and tech, rushers skip both.
             if (this.config && priority > 0) {
                 if (logic instanceof AntiGroundStaticDefence || logic instanceof AntiAirStaticDefence) {

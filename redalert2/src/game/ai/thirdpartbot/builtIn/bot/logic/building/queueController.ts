@@ -128,7 +128,9 @@ export class QueueController {
         let infantry = 0;
         let enemyAa = 0;
         let total = 0;
-        for (const id of game.getVisibleUnits(player.name, "enemy")) {
+        // Global inventory like retail's AIForcePrediction — the per-difficulty
+        // CENSUS_FUDGE is the misjudgment texture, not the shroud.
+        for (const id of (game as any).getEnemyUnitsGlobal(player.name)) {
             const data = game.getGameObjectData(id);
             const rules: any = data?.rules;
             if (!rules?.isSelectableCombatant && !rules?.isBaseDefense) {

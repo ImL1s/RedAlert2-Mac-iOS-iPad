@@ -101,18 +101,21 @@ export class PaletteBasicMaterial extends THREE.MeshBasicMaterial {
             shader.uniforms = THREE.UniformsUtils.merge([shader.uniforms, this.uniforms]);
             shader.vertexShader = this.vertexShader;
             shader.fragmentShader = this.fragmentShader;
-            this.userData.lastCompiledShader = {
-                vertexShader: shader.vertexShader,
-                fragmentShader: shader.fragmentShader,
-                uniforms: Object.keys(shader.uniforms),
-            };
-            console.log('[PaletteBasicMaterial] compiled', {
-                type: this.type,
-                hasMap: !!this.map,
-                defines: this.defines,
-                hasColorFragmentInclude: shader.fragmentShader.includes('#include <color_fragment>'),
-                hasPaletteColorIndex: shader.fragmentShader.includes('paletteColorIndex'),
-            });
+            // Dev-only: retaining shader source per material instance is real
+            // memory (two full GLSL strings x one material per unit/building),
+            // and the per-compile log is hundreds of lines during world build.
+            if ((import.meta as any).env?.DEV) {
+                this.userData.lastCompiledShader = {
+                    vertexShader: shader.vertexShader,
+                    fragmentShader: shader.fragmentShader,
+                    uniforms: Object.keys(shader.uniforms),
+                };
+                console.log('[PaletteBasicMaterial] compiled', {
+                    type: this.type,
+                    hasMap: !!this.map,
+                    defines: this.defines,
+                });
+            }
         };
         this.needsUpdate = true;
     }

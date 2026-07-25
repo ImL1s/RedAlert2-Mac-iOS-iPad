@@ -19,9 +19,14 @@ interface SeedManifest {
 export function installShellDebugLog(): void {
     if (!isNativeShell())
         return;
-    // Override with RA2_DEBUG_LOG_HOST at build time to reach a dev machine on
-    // the LAN (device localhost can't). Falls back to loopback for the sim.
-    const host = (import.meta as any).env?.VITE_DEBUG_LOG_HOST || '127.0.0.1';
+    // Only active when a receiver host was baked in at build time. Without
+    // this gate, release builds fire one fetch() per console call at an
+    // unreachable host — thousands of in-flight Requests retaining their
+    // body strings during boot and world build, in the process that gets
+    // jetsam-killed first.
+    const host = (import.meta as any).env?.VITE_DEBUG_LOG_HOST;
+    if (!host)
+        return;
     const endpoint = `http://${host}:4100/log`;
     const safeArg = (a: unknown): string => {
         if (a instanceof Error)

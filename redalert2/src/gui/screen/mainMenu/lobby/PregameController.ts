@@ -636,7 +636,16 @@ export class PregameController {
             if (!ai) {
                 continue;
             }
-            if (ai.difficulty !== AiDifficulty.Easy && ai.difficulty !== AiDifficulty.Normal && ai.difficulty !== AiDifficulty.Custom) {
+            // MediumSea has no lobby name of its own — fold it into the
+            // Training Dummy so the display always matches the bot spawned.
+            if (ai.difficulty === AiDifficulty.MediumSea) {
+                ai.difficulty = AiDifficulty.Medium;
+            }
+            if (ai.difficulty !== AiDifficulty.Easy &&
+                ai.difficulty !== AiDifficulty.Normal &&
+                ai.difficulty !== AiDifficulty.Brutal &&
+                ai.difficulty !== AiDifficulty.Medium &&
+                ai.difficulty !== AiDifficulty.Custom) {
                 ai.difficulty = AiDifficulty.Easy;
             }
             if (ai.countryId !== undefined && ai.countryId >= this.getAvailablePlayerCountries().length) {

@@ -438,7 +438,10 @@ export class AttackMissionFactory {
         // personality multiplier shapes tempo on top — no double-dipping.
         const cooldownMultiplier = config?.attackCooldownMultiplier ?? 1;
         const launchGate = LAUNCH_GATE_BY_DIFFICULTY[config?.difficultyId ?? "normal"] ?? 750;
-        this.visibleTargetCooldownTicks = Math.round(launchGate * cooldownMultiplier);
+        // Hard 100s ceiling between wave launches: easy x turtle
+        // (1050 x 1.7 = 1785 ticks) was the only combo above it and read
+        // as "the AI stopped attacking" mid-game.
+        this.visibleTargetCooldownTicks = Math.min(1500, Math.round(launchGate * cooldownMultiplier));
         this.baseAttackCooldownTicks = Math.round(BASE_ATTACK_COOLDOWN_TICKS * cooldownMultiplier);
         this.firstAttackAllowedTick = (config?.firstAttackDelaySeconds ?? 0) * TICKS_PER_SECOND;
         this.maxPreparing = config?.maxPreparingAttacks ?? 2;

@@ -165,6 +165,34 @@ export class GameApi {
             visibilityFilter(obj))
             .map((obj: any) => obj.id);
     }
+    /**
+     * GLOBAL enemy census: every non-destroyed techno owned by a hostile
+     * combatant, ignoring shroud. Retail AITriggerType conditions and force
+     * appraisal (AIForcePredictionFudge) read the target house's REAL
+     * inventory, so strategic censuses (trigger eligibility, counter
+     * composition) must use this instead of getVisibleUnits, which starves
+     * the AI against an unscouted enemy. Tactical targeting must stay on
+     * getVisibleUnits — bots may not aim at what they cannot see. Cheaper
+     * than the visible query: one pass over enemy-owned objects, no shroud
+     * tile walks.
+     */
+    getEnemyUnitsGlobal(playerName: string, filter: (rules: any) => boolean = () => true): any[] {
+        const player = this.game.getPlayerByName(playerName);
+        if (!player)
+            throw new Error(`Player "${playerName}" doesn't exist`);
+        const result: any[] = [];
+        for (const enemy of this.game.getCombatants()) {
+            if (enemy === player || this.game.alliances.areAllied(enemy, player)) {
+                continue;
+            }
+            for (const obj of enemy.getOwnedObjects()) {
+                if (!obj.isDestroyed && filter(obj.rules)) {
+                    result.push(obj.id);
+                }
+            }
+        }
+        return result;
+    }
     getGameObjectData(objectId: any): GameObjectData | undefined {
         if (this.game.getWorld().hasObjectId(objectId)) {
             const obj = this.game.getObjectById(objectId);

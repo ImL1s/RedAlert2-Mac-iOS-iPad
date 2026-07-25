@@ -11,6 +11,7 @@ import { ChecksumError } from './importError/ChecksumError';
 import { FileNotFoundError as GameResFileNotFoundError } from './importError/FileNotFoundError';
 import { NoStorageError } from './importError/NoStorageError';
 import { Crc32 } from '../../data/Crc32';
+import { isNativeShell } from '../../shell/iosSeed';
 import { Palette } from '../../data/Palette';
 import { ShpFile } from '../../data/ShpFile';
 import { PcxFile } from '../../data/PcxFile';
@@ -455,12 +456,22 @@ export class GameRes {
             if (!rfs) {
                 throw new NoStorageError("No available storage adapters for local/archive resources.");
             }
-            console.info("Checking integrity of mix files...");
-            const rootDir = rfs.getRootDirectory();
-            if (!rootDir)
-                throw new Error("RFS root not available for mix integrity check");
-            await this.checkMixesIntegrity(rootDir);
-            console.info("Mixes are valid.");
+            if (isNativeShell()) {
+                // The shell's seeder already verifies per-file sizes against the
+                // bundle manifest and self-heals. Re-reading ra2.mix here just to
+                // CRC it doubles a ~280MB allocation at the worst possible moment
+                // (boot, before the GC has any pressure signal) — a real
+                // contributor to WebContent jetsam kills on phones.
+                console.info("Skipping mix CRC check (native shell: seeder verifies sizes).");
+            }
+            else {
+                console.info("Checking integrity of mix files...");
+                const rootDir = rfs.getRootDirectory();
+                if (!rootDir)
+                    throw new Error("RFS root not available for mix integrity check");
+                await this.checkMixesIntegrity(rootDir);
+                console.info("Mixes are valid.");
+            }
         }
         const logger = AppLogger.get("vfs");
         logger.info("Initializing virtual filesystem...");

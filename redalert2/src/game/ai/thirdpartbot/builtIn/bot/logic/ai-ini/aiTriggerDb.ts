@@ -396,7 +396,11 @@ export class AiTriggerDatabase {
         // Precompute the world census ONCE: per-trigger conditions used to
         // issue a full-world scan each (a burst of 40-120 scans per pass).
         const enemyCounts = new Map<string, number>();
-        for (const id of game.getVisibleUnits(playerData.name, "enemy")) {
+        // Retail AITriggerType conditions read the enemy house's REAL
+        // inventory (no shroud check) — census globally, or an unscouted
+        // human fails every "enemy owns X" condition and the trigger pool
+        // collapses to the unconditional starter teams.
+        for (const id of (game as any).getEnemyUnitsGlobal(playerData.name)) {
             const rules: any = (game.getGameObjectData(id) as any)?.rules;
             if (rules?.name) {
                 enemyCounts.set(rules.name, (enemyCounts.get(rules.name) ?? 0) + 1);

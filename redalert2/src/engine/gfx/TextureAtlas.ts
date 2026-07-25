@@ -90,6 +90,13 @@ export class TextureAtlas {
         const rgbaData = createAtlasRgbaData(atlasBitmap);
         const texture = new THREE.DataTexture(rgbaData, width, height, THREE.RGBAFormat);
         texture.needsUpdate = true;
+        // Once the GPU upload happens, drop the JS-side pixel copy — three
+        // never frees texture.image.data, which otherwise doubles every
+        // atlas to 8 bytes/pixel in the heap that gets jetsam-killed first.
+        texture.onUpdate = function (this: THREE.DataTexture) {
+            (this.image as any).data = null;
+            this.onUpdate = null as any;
+        } as any;
         texture.flipY = true;
         texture.minFilter = THREE.NearestFilter;
         texture.magFilter = THREE.NearestFilter;

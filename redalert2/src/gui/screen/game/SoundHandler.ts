@@ -2,6 +2,8 @@ import { CompositeDisposable } from '@/util/disposable/CompositeDisposable';
 import { EventType } from '@/game/event/EventType';
 import { SoundKey } from '@/engine/sound/SoundKey';
 import { ChannelType } from '@/engine/sound/ChannelType';
+import { SoundControl } from '@/engine/sound/SoundSpecs';
+import { aiUiNames } from '@/game/gameopts/constants';
 import { Coords } from '@/game/Coords';
 import { PowerupType } from '@/game/type/PowerupType';
 import { SuperWeaponType } from '@/game/type/SuperWeaponType';
@@ -73,12 +75,25 @@ export class SoundHandler {
     private triggerSoundHandles = new Map();
     private disposables = new CompositeDisposable();
     private lastFeedbackTime?: number;
+    private weaponLoopHandles = new Map<any, { handle: any; soundName: string }>();
+    private weaponLoopTimer?: ReturnType<typeof setInterval>;
     constructor(private game: any, private worldSound: any, private eva: any, private sound: any, private gameEvents: any, private messageList: any, private strings: any, private player: any) { }
     init(): void {
         this.disposables.add(this.gameEvents.subscribe((event: any) => this.handleGameEvent(event)));
+        // Looping weapon reports (gattling) have no cease-fire event; poll the
+        // shooter's sim state to spin the loop down when firing stops.
+        this.weaponLoopTimer = setInterval(() => this.updateWeaponLoops(), 100);
     }
     dispose(): void {
         this.disposables.dispose();
+        if (this.weaponLoopTimer !== undefined) {
+            clearInterval(this.weaponLoopTimer);
+            this.weaponLoopTimer = undefined;
+        }
+        for (const [, loop] of this.weaponLoopHandles) {
+            loop.handle.stop();
+        }
+        this.weaponLoopHandles.clear();
     }
     private handleGameEvent(event: any): void {
         switch (event.type) {
@@ -116,6 +131,11 @@ export class SoundHandler {
                 break;
             case EventType.ObjectDestroy:
                 this.handleObjectDestroySound(event);
+                const destroyedLoop = this.weaponLoopHandles.get(event.target);
+                if (destroyedLoop) {
+                    destroyedLoop.handle.stop();
+                    this.weaponLoopHandles.delete(event.target);
+                }
                 break;
             case EventType.ObjectSpawn:
                 this.handleObjectSpawnSound(event);
@@ -182,10 +202,56 @@ export class SoundHandler {
     private handleWeaponFireSound(event: any): void {
         const weapon = event.weapon;
         const gameObject = event.gameObject;
-        if (weapon.rules.report?.length) {
-            const volume = weapon.warhead.rules.electricAssault ? 0.25 : 1;
-            const soundIndex = Math.floor(Math.random() * weapon.rules.report.length);
-            this.worldSound.playEffect(weapon.rules.report[soundIndex], gameObject.position.worldPosition, gameObject.owner, volume);
+        if (!weapon.rules.report?.length) {
+            return;
+        }
+        const volume = weapon.warhead.rules.electricAssault ? 0.25 : 1;
+        const soundIndex = Math.floor(Math.random() * weapon.rules.report.length);
+        const soundName = weapon.rules.report[soundIndex];
+        const spec = this.sound.getSoundSpec?.(soundName);
+        const isLoop = !!spec && (spec.control.has(SoundControl.Loop) || spec.control.has(SoundControl.Ambient));
+        if (!isLoop) {
+            this.worldSound.playEffect(soundName, gameObject.position.worldPosition, gameObject.owner, volume);
+            return;
+        }
+        // Looping report (gattling GattlingGunAttackLoop*): keep exactly one
+        // loop per shooter instead of stacking a new infinite loop per shot.
+        const existing = this.weaponLoopHandles.get(gameObject);
+        if (existing) {
+            if (existing.handle.isPlaying() && weapon.rules.report.includes(existing.soundName)) {
+                return; // same gattling stage still firing: let the loop run
+            }
+            existing.handle.stop(); // stage changed: retire the old loop (plays its decay tail)
+            this.weaponLoopHandles.delete(gameObject);
+        }
+        // Pass the game object itself so the loop follows the shooter and is
+        // auto-stopped by WorldSound.handleObjectRemoved on death/removal.
+        const handle = this.worldSound.playEffect(soundName, gameObject, gameObject.owner, volume);
+        if (handle) {
+            this.weaponLoopHandles.set(gameObject, { handle, soundName });
+        }
+    }
+    /** Stop looping weapon reports whose shooter is gone or disengaged. */
+    private updateWeaponLoops(): void {
+        for (const [gameObject, loop] of this.weaponLoopHandles) {
+            if (!loop.handle.isPlaying()) {
+                this.weaponLoopHandles.delete(gameObject);
+                continue;
+            }
+            // Mirror GattlingTrait's engagement predicate.
+            const attackTrait = gameObject.attackTrait;
+            const currentTask = gameObject.unitOrderTrait?.getCurrentTask?.();
+            const engaged = !gameObject.isDestroyed &&
+                !gameObject.isCrashing &&
+                !!attackTrait &&
+                !attackTrait.isDisabled() &&
+                ((!!currentTask && /Attack/.test(currentTask.constructor?.name ?? '')) ||
+                    !attackTrait.isIdle() ||
+                    !!attackTrait.opportunityFireTask);
+            if (!engaged) {
+                loop.handle.stop(); // AudioLoop.stop() plays the spin-down (decay) sound
+                this.weaponLoopHandles.delete(gameObject);
+            }
         }
     }
     private handleDamageSound(event: any): void {
@@ -294,7 +360,7 @@ export class SoundHandler {
         }
         if (!player.resigned) {
             const playerName = player.isAi
-                ? this.strings.get(`AI_${player.aiDifficulty}`)
+                ? this.strings.get(aiUiNames.get(player.aiDifficulty) ?? 'GUI:AIDummy')
                 : player.name;
             this.eva.play(player !== this.player ? 'EVA_PlayerDefeated' : 'EVA_YouHaveLost');
             this.messageList.addSystemMessage(this.strings.get('TXT_PLAYER_DEFEATED', playerName), player);

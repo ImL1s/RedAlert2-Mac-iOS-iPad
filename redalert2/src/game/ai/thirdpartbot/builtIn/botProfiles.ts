@@ -220,13 +220,24 @@ export function resolveBotConfig(profile: BotProfile, personality: BotPersonalit
         apm: profile.apm,
         armySizeMultiplier: profile.armySizeMultiplier * personality.armySizeMultiplier,
         attackCooldownMultiplier: profile.attackCooldownMultiplier * personality.attackCooldownMultiplier,
-        firstAttackDelaySeconds: Math.round(profile.firstAttackDelaySeconds * personality.firstAttackDelayMultiplier),
+        // Clamp: no difficulty x personality combo may sit passive past 4
+        // minutes before its first offensive (turtle/boomer 1.5-1.8x
+        // multipliers were pushing easy to 6-7 minutes of dead air).
+        firstAttackDelaySeconds: Math.min(
+            240,
+            Math.round(profile.firstAttackDelaySeconds * personality.firstAttackDelayMultiplier),
+        ),
         compositionWeights: personality.compositionWeights,
         personalityId: personality.id,
         difficultyId: profile.id,
         unitReserveCredits: personality.unitReserveCredits,
         maxPreparingAttacks: personality.maxPreparingAttacks,
-        attackLaunchTimeoutTicks: personality.attackLaunchTimeoutTicks,
+        // Easy assembles slowly (lean eco texture); cap how long a wave may
+        // sit assembling so easy stays visibly active.
+        attackLaunchTimeoutTicks:
+            profile.id === "easy"
+                ? Math.min(personality.attackLaunchTimeoutTicks, 1800)
+                : personality.attackLaunchTimeoutTicks,
         teamCostBias: personality.teamCostBias,
         targetPreference: personality.targetPreference,
         defensePriorityMultiplier: personality.defensePriorityMultiplier,

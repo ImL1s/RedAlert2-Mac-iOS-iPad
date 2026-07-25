@@ -95,7 +95,7 @@ export class Sound {
         }
         return soundKey;
     }
-    private getSoundSpec(key: SoundKey | string): SoundSpec | undefined {
+    getSoundSpec(key: SoundKey | string): SoundSpec | undefined {
         const soundKey = this.getSoundKey(key);
         if (soundKey) {
             const spec = this.soundSpecs.getSpec(soundKey);

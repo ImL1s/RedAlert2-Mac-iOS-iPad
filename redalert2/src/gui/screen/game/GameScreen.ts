@@ -503,7 +503,10 @@ export class GameScreen extends RootScreen {
         };
         this.errorHandler.handle(error, message, skipGoToMenu ? undefined : () => {
             cleanup();
-            this.controller?.goToScreen('MainMenuRoot');
+            // Screens are registered by numeric ScreenType — the old string
+            // argument threw "Screen not found" AFTER teardown, leaving a
+            // black screen instead of the menu.
+            this.controller?.goToScreen(ScreenType.MainMenuRoot);
         });
         if (skipGoToMenu) {
             cleanup();
