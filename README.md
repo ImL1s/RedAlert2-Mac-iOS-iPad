@@ -196,6 +196,21 @@ tile changes — the earlier performance pass that took total frame CPU to
 ~3.6ms, which the AI work then had to respect (and did — see the numbers
 above).
 
+Then the iPad still ran hot, and CPU profiling said the wrong thing: rendering
+at one-eighth the pixels saved only 5% of frame CPU. The GPU does its work
+asynchronously, so the bytes it drags through DRAM — the term that actually
+dominates power on a tile-based mobile GPU — never show up in a
+`performance.now()` delta. Measuring bytes instead found that the sprite
+batches were drawing all 10,000 preallocated slots every frame at 2.4%
+occupancy, the shadow map covered 233 tiles for a 31-tile view, every sprite
+atlas was RGBA8 carrying a single payload byte, and the palette shader ran
+nine `pow()` per fragment computing the identity function. Fixing those took
+two of those terms from 2.81 GB/s to 0.25 GB/s with the image unchanged (the
+shadows are *sharper*: a fitted box has 3.7× finer texels even at a quarter
+the map size). The shell now also reports `ProcessInfo.thermalState` to the
+page, so the renderer — never the simulation — throttles itself when iOS says
+the device is under thermal stress.
+
 **→ The complete engineering log: [docs/PORTING_PLAYBOOK.md](docs/PORTING_PLAYBOOK.md)**
 
 Like the Generals port, this is a **human + AI collaboration**: the

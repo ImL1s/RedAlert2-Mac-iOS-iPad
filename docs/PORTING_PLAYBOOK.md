@@ -741,6 +741,98 @@ precondition: build the second factory when the bank can feed it.
 
 ---
 
+## 16. Cooling the iPad: the heat was in the bytes, not the frames
+
+The complaint was concrete: the iPad mini got hot in long games, while the
+Generals port — a far more modern, more demanding game — barely warmed it.
+
+The instinct is to blame JavaScript. That instinct is wrong, and worth
+dismantling because it sends you on a months-long rewrite. Inside WKWebView,
+JavaScriptCore JIT-compiles the engine to native ARM64, and ANGLE translates
+WebGL to Metal — structurally the same layer DXVK/MoltenVK provides for
+Generals. Going native removes JS dynamic-typing overhead and per-call WebGL
+validation; it does not unlock a missing translation layer. And a native
+renderer that reproduced this renderer's mistakes would run exactly as hot.
+
+**Heat is sustained average power, and on a tile-based GPU the dominant term
+is memory bandwidth — which CPU timings cannot see.** That is the trap. An
+on-device profile said the app was CPU-bound: rendering at one-eighth the
+pixels saved only 5% of CPU time. The honest reading of that experiment is
+not "fill rate does not matter"; it is "CPU milliseconds are the wrong
+instrument." The GPU does its work asynchronously, so the bytes it drags
+through DRAM never appear in a `performance.now()` delta.
+
+So measure bytes. Four findings, all verified in a live match on real iOS:
+
+**The sprite batches drew ten thousand slots each, every frame.**
+`BatchShpBuilder` preallocates a 10,000-sprite geometry and never called
+`setDrawRange`. Empty slots were hidden by writing 0 into an alpha lane and
+letting `alphaTest` discard — which kills the pixels but not the index fetch
+or the vertex shading. Measured occupancy in a real match: **2.4%**. Five
+meshes were pulling 600,000 indices and 400,000 vertices per frame to draw
+about 14,000 indices' worth of trees and ore. 16 MB/frame → 0.4 MB/frame.
+
+**The shadow box covered 233 tiles for a 31-tile view.** A fixed ortho box
+centred on the map meant roughly 1% of the depth texels landed where the
+player was looking, and a 2048² depth target was re-rasterised every frame —
+32 MB/frame of render-target traffic, more than twice the colour buffer.
+Fitting the box to the visible rect made the texels 3.7× finer, which bought
+the room to halve the map to 1024². The result is *sharper* shadows for a
+quarter of the bandwidth.
+
+The mandatory detail: a shadow box that follows the camera must have its
+origin snapped to whole shadow texels, or every shadow edge crawls while you
+pan. Snapping in world X/Z is not enough — the shadow camera's axes are not
+the world's. Project the centre onto the shadow camera's own basis vectors,
+round *those* to texel multiples, and rebuild. Verified by panning in
+sub-texel steps and asserting the light target only ever moves in exact texel
+increments.
+
+**Every sprite atlas was RGBA8 carrying one payload byte.** The shader reads a
+palette index; R, G and B were hard zero. Switching to R8 cut resident atlas
+memory from 89 MB to 22 MB. Two traps: set `unpackAlignment = 1` or GL's
+default 4-byte row padding shreds any atlas whose width is not a multiple of
+four; and read `.r` unconditionally rather than behind a `#define`, because
+`THREE.Material.copy()` does not copy `defines` and would silently drop the
+flag on exactly the batched meshes that matter most.
+
+**The palette shader computed the identity function nine times per fragment.**
+The palette texture was tagged sRGB, so the texture unit decoded it;
+`ra2ToPaletteSpace` immediately re-encoded it; after lighting,
+`ra2FromPaletteSpace` decoded again and three's `<colorspace_fragment>`
+re-encoded. Two cancelling pairs, four stages, nine `pow()` per palette-shaded
+pixel across roughly 3× screen overdraw. Untag the texture, drop the output
+encode, and the pixels are not merely unchanged but slightly *more* accurate —
+the removed round trip was losing low bits on dark palette entries.
+
+Those two bandwidth items alone go from **2.81 GB/s to 0.25 GB/s**, and that
+is before the 30 fps touch default halves everything on the render path again.
+
+Two process notes worth more than any individual fix:
+
+**Ship-mode gating is a power feature, not just hygiene.** The debug REPL was
+live in the build being played: a 0.5 Hz `fetch()` to a hardcoded LAN IP,
+forever, plus `eval()` of whatever came back. A radio that never reaches its
+low-power state is tens of milliwatts of sustained draw. Gate debug channels
+on a build-mode constant that folds to `false`, so the bundler deletes the
+bodies and grepping `dist/` is a meaningful check — not on an ambient
+environment variable that any build command can forget.
+
+**Give the game the one fact only the OS knows.** JavaScript cannot tell SoC
+throttling from a heavy frame. Twelve lines of Swift observing
+`ProcessInfo.thermalState` (push-based; no polling, no new wakeup source) let
+the renderer cap itself at 20 fps under `serious` and 15 under `critical`.
+Cap rendering only — never the simulation tick rate — and the adjustment is
+safe mid-match on a lockstep engine.
+
+Finally: verify touch-only code paths on a touch target. The `pointer: coarse`
+defaults — 30 fps, the 1024 shadow clamp — are invisible on a desktop browser
+by construction. The iOS Simulator runs the same WebKit and the same
+ANGLE-to-Metal path, boots unattended, and is drivable end to end over the
+same debug REPL. It is where those branches were actually confirmed to fire.
+
+---
+
 ## Appendix: reproducing an asset build
 
 ```sh
