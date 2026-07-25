@@ -231,7 +231,16 @@ export function resolveBotConfig(profile: BotProfile, personality: BotPersonalit
         personalityId: personality.id,
         difficultyId: profile.id,
         unitReserveCredits: personality.unitReserveCredits,
-        maxPreparingAttacks: personality.maxPreparingAttacks,
+        // maxPreparingAttacks was personality-only, so an easy x harasser (3
+        // prongs) pressured the player harder than a brutal x turtle (1).
+        // Layer the difficulty on top: easy loses a prong (floor 1), brutal
+        // gains one. No easy cell can now exceed any brutal cell.
+        maxPreparingAttacks:
+            profile.id === "easy"
+                ? Math.max(1, personality.maxPreparingAttacks - 1)
+                : profile.id === "brutal"
+                  ? personality.maxPreparingAttacks + 1
+                  : personality.maxPreparingAttacks,
         // Easy assembles slowly (lean eco texture); cap how long a wave may
         // sit assembling so easy stays visibly active.
         attackLaunchTimeoutTicks:

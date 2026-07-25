@@ -38,6 +38,12 @@ const FIGHT_EVAL_INTERVAL_TICKS = 45;
 // Consecutive losing evaluations before the squad breaks off.
 const FIGHT_EVAL_LOSING_STREAK = 2;
 
+// Hard ceiling on assembly. Gathering's only other exit is maxSpread dropping
+// under the gather radius, so ONE member that cannot close (stranded across
+// water, frozen deployed, mind-controlled and driven away) pins the whole
+// squad — and its locked units — at home for the rest of the match.
+const MAX_GATHER_TICKS = 450;
+
 // Long-range units hold a stand-off ring instead of walking into the base.
 const STANDOFF_MIN_RANGE = 7;
 
@@ -77,6 +83,9 @@ export class CombatSquad implements Squad {
 
     private lastFightEvalAt = 0;
     private losingStreak = 0;
+
+    // First tick this squad entered Gathering (see MAX_GATHER_TICKS).
+    private gatheringSinceTick: number | null = null;
 
     private approachWaypoint: Vector2 | null = null;
     private waypointPickedAt: number | null = null;
@@ -169,6 +178,10 @@ export class CombatSquad implements Squad {
             const leaderPos = leader ? new Vector2(leader.tile.rx, leader.tile.ry) : null;
 
             if (this.state === SquadState.Gathering) {
+                if (this.gatheringSinceTick === null) {
+                    this.gatheringSinceTick = currentTick;
+                }
+                const gatherTimedOut = currentTick > this.gatheringSinceTick + MAX_GATHER_TICKS;
                 const requiredGatherRadius = GameMath.sqrt(groundUnitIds.length) * GATHER_RATIO + MIN_GATHER_RADIUS;
                 const gatherPoint =
                     leaderPos && game.mapApi.getTile(leaderPos.x, leaderPos.y) !== undefined ? leaderPos : centerOfMass;
@@ -216,6 +229,7 @@ export class CombatSquad implements Squad {
                 }
 
                 if (
+                    !gatherTimedOut &&
                     gatherPoint &&
                     maxSpread &&
                     game.mapApi.getTile(gatherPoint.x, gatherPoint.y) !== undefined &&

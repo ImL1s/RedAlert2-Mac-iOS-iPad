@@ -26,6 +26,8 @@ export class BuiltInBot extends Bot {
     private tickRatio?: number;
     private phaseOffset = 0;
     private botUpdateCount = 0;
+    // How many bot updates between mission/strategy passes (set in onGameStart).
+    private missionUpdateDivisor = 3;
     private queueController: QueueController;
     private tickOfLastAttackOrder: number = 0;
     private lastDeployAttemptTick: number = -9999;
@@ -61,7 +63,14 @@ export class BuiltInBot extends Bot {
     }
 
     override onGameStart(game: GameApi) {
-        const gameRate = game.getTickRate();
+        // Bot cadence must track SIM TICKS, not the wall clock: getTickRate()
+        // follows the lobby game-speed slider (10..60 tps) while every pacing
+        // constant in this bot (launch gates, timeouts, decay windows) is raw
+        // ticks — so at the default speed 6 every difficulty thought ~6x
+        // slower per game tick than intended. Clamp to 2x the base rate:
+        // full speed-independence would triple brutal's per-tick AI cost on
+        // device; this halves the sluggishness at identical worst-case cost.
+        const gameRate = Math.min(game.getTickRate(), 2 * game.getBaseTickRate());
         const botApm = this.profile.apm;
         const botRate = botApm / 60;
         this.tickRatio = Math.ceil(gameRate / botRate);
@@ -73,6 +82,13 @@ export class BuiltInBot extends Bot {
             hash = (hash * 31 + this.name.charCodeAt(i)) >>> 0;
         }
         this.phaseOffset = hash % this.tickRatio;
+        // Missions run every Nth bot update. At high apm a bot update is a
+        // fraction of a second so 3 is right, but at apm 60 (easy) a bot
+        // update is already sparse: a fixed 3x divisor put easy's mission
+        // cadence below what the squad-order (10t), fight-eval (45t) and
+        // stuck-check (90t) intervals assume. Integer math on values fixed at
+        // game start — lockstep-identical on every client.
+        this.missionUpdateDivisor = Math.max(1, Math.min(3, Math.round(gameRate / this.tickRatio)));
 
         const myPlayer = game.getPlayerData(this.name);
 
@@ -196,7 +212,7 @@ export class BuiltInBot extends Bot {
             // offset 5 → bot ticks are always ≡ 1 mod 3) — such bots NEVER ran
             // missions, strategy, or superweapons and sat idle all game.
             this.botUpdateCount++;
-            if (this.botUpdateCount % 3 === 0) {
+            if (this.botUpdateCount % this.missionUpdateDivisor === 0) {
                 this.missionController.onAiUpdate(fullContext);
                 this.strategy = this.strategy.onAiUpdate(fullContext, this.missionController, (message, sayInGame) =>
                     this.logBotStatus(message, sayInGame),

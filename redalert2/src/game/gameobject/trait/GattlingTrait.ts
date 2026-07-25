@@ -29,7 +29,7 @@ export class GattlingTrait {
         // (buildings fire without one via opportunity fire, covered by the
         // attackState check); RateDown applies once the engagement ends.
         const currentTask = gameObject.unitOrderTrait?.getCurrentTask?.();
-        const engaged = ((!!currentTask && /Attack/.test(currentTask.constructor?.name ?? '')) ||
+        const engaged = ((!!currentTask && (currentTask as any)[Symbol.for("ra2.isAttackTask")] === true) ||
             !attackTrait.isIdle() ||
             // Buildings defend through the attack trait's internal
             // opportunity-fire task, never a unit order.

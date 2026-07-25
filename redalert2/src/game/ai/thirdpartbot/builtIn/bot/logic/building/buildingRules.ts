@@ -12,7 +12,7 @@ import {
     Vector2,
 } from "../../../game-api";
 import { GlobalThreat } from "../threat/threat";
-import { AntiGroundStaticDefence } from "./antiGroundStaticDefence";
+import { AntiGroundStaticDefence, DualPurposeStaticDefence } from "./antiGroundStaticDefence";
 import { ArtilleryUnit } from "./artilleryUnit";
 import { BasicAirUnit } from "./basicAirUnit";
 import { BasicBuilding } from "./basicBuilding";
@@ -198,10 +198,13 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["GAWEAT", new BasicBuilding(6, 1, 5000)], // Weather Controller
     ["GACSPH", new BasicBuilding(5, 1, 5000)], // Chronosphere
 
-    ["GAPILL", new AntiGroundStaticDefence(2, 1, 7.5, 5)], // Pillbox
-    ["ATESLA", new AntiGroundStaticDefence(2, 1, 10, 3)], // Prism Cannon
-    ["GTGCAN", new AntiGroundStaticDefence(2, 1, 10, 3)], // Grand Cannon (France)
-    ["NASAM", new AntiAirStaticDefence(1, 1, 7.5)], // Patriot Missile
+    // baseAmount must equal the intended count: the no-threat priority ramp is
+    // basePriority * (1 - numOwned / baseAmount), so baseAmount 1 hard-stopped
+    // every defense at ONE copy and made DEFENSE_CAP_BY_DIFFICULTY unreachable.
+    ["GAPILL", new AntiGroundStaticDefence(2, 6, 7.5, 6)], // Pillbox
+    ["ATESLA", new AntiGroundStaticDefence(2, 4, 10, 4)], // Prism Cannon
+    ["GTGCAN", new AntiGroundStaticDefence(2, 4, 10, 4)], // Grand Cannon (France)
+    ["NASAM", new AntiAirStaticDefence(1, 4, 7.5)], // Patriot Missile
     ["GAWALL", new AntiGroundStaticDefence(0, 0, 0, 0)], // Walls
     ["GAROBO", new BasicBuilding(4, 2, 1500)], // Robot Control Center (powers ROBO; keep a spare)
     ["GASPYSAT", new BasicBuilding(4, 1, 2500)], // Spy Satellite (map reveal)
@@ -243,9 +246,9 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["NAMISL", new BasicBuilding(6, 1, 5000)], // Nuclear Missile Silo
     ["NAIRON", new BasicBuilding(5, 1, 5000)], // Iron Curtain
 
-    ["NALASR", new AntiGroundStaticDefence(2, 1, 7.5, 5)], // Sentry Gun
-    ["NAFLAK", new AntiAirStaticDefence(1, 1, 7.5)], // Flak Cannon
-    ["TESLA", new AntiGroundStaticDefence(2, 1, 10, 3)], // Tesla Coil
+    ["NALASR", new AntiGroundStaticDefence(2, 6, 7.5, 6)], // Sentry Gun
+    ["NAFLAK", new AntiAirStaticDefence(1, 4, 7.5)], // Flak Cannon
+    ["TESLA", new AntiGroundStaticDefence(2, 4, 10, 4)], // Tesla Coil
     ["NAWALL", new AntiGroundStaticDefence(0, 0, 0, 0)], // Walls
 
     ["E2", new BasicGroundUnit(2, 2, 0.2, 0)], // Conscript
@@ -285,8 +288,8 @@ export const BUILDING_NAME_TO_RULES = new Map<string, AiBuildingRules>([
     ["YAPPET", new BasicBuilding(6, 1, 5000)], // Psychic Dominator
     ["YAGNTC", new BasicBuilding(4, 1, 4000)], // Genetic Mutator
 
-    ["YAGGUN", new AntiGroundStaticDefence(2, 1, 10, 3)], // Gattling Cannon (also AA)
-    ["YAPSYT", new AntiGroundStaticDefence(2, 1, 10, 3)], // Psychic Tower
+    ["YAGGUN", new DualPurposeStaticDefence(2, 6, 10, 6, 7.5)], // Gattling Cannon (AA + AG — Yuri's only AA structure)
+    ["YAPSYT", new AntiGroundStaticDefence(2, 5, 10, 5)], // Psychic Tower
 
     ["INIT", new BasicGroundUnit(2, 2, 0.2, 0)], // Initiate
     ["YENGINEER", new BasicGroundUnit(1, 0, 0)], // Yuri Engineer

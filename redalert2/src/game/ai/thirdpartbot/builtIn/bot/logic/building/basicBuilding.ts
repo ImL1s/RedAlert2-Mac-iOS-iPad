@@ -43,7 +43,21 @@ export class BasicBuilding implements AiBuildingRules {
         const priority = this.basePriority * (1.0 - numOwned / max);
 
         if (this.onlyBuildWhenFloatingCreditsAmount && playerData.credits < this.onlyBuildWhenFloatingCreditsAmount) {
-            return priority * (playerData.credits / this.onlyBuildWhenFloatingCreditsAmount);
+            const scale = playerData.credits / this.onlyBuildWhenFloatingCreditsAmount;
+            // Retail techs on a SCHEDULE, not on a bank balance. A healthy bot
+            // spends to zero every pass (that is the normal state), so scaling
+            // desire by current credits meant radar/battle lab/superweapon
+            // requests never formed at all — and the pause-to-save mechanism
+            // can only save toward a request that exists. Once a war factory
+            // stands (core base established), keep at least 40% desire so the
+            // tech ladder enters the queue and completes as income arrives.
+            const hasWarFactory =
+                game.getVisibleUnits(
+                    playerData.name,
+                    "self",
+                    (r) => r.name === "GAWEAP" || r.name === "NAWEAP" || r.name === "YAWEAP",
+                ).length > 0;
+            return priority * (hasWarFactory ? Math.max(scale, 0.4) : scale);
         }
 
         return priority;

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { TextureAtlas } from './TextureAtlas';
 import Stats from 'stats.js';
 import { EventDispatcher } from '../../util/event';
 import { RendererError } from './RendererError';
@@ -68,6 +69,10 @@ export class Renderer {
         this.renderer = renderer;
     }
     createGlRenderer(canvas?: HTMLCanvasElement): THREE.WebGLRenderer {
+        // Atlases drop their CPU pixel copies after upload; a fresh GL context
+        // re-uploads from texture.image.data, so refill them first or every
+        // sprite comes back fully transparent.
+        TextureAtlas.restoreAll();
         let renderer: THREE.WebGLRenderer;
         try {
             renderer = new THREE.WebGLRenderer({

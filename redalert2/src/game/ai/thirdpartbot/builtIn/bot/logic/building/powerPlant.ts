@@ -29,7 +29,9 @@ export class PowerPlant implements AiBuildingRules {
             PowerPlant.ABSOLUTE_MAX_PLANTS,
         );
         if (numOwned >= cap) {
-            return 0;
+            // Negative = hard cap (drop the request); 0 would be treated as a
+            // transient dip and floored to 1 by the sticky-production branch.
+            return -1;
         }
         if (playerData.power.total < playerData.power.drain) {
             return 100;

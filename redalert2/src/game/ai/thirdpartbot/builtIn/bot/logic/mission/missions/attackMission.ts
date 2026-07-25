@@ -81,9 +81,16 @@ export class AttackMission extends Mission<AttackFailReason> {
         this.requestedUnitCount = composition.maximumUnits;
     }
 
-    private launch(): void {
+    private launch(currentTick: number): void {
         this.priority = ATTACK_MISSION_INITIAL_PRIORITY;
         this.state = AttackMissionState.Attacking;
+        // Start the no-target clock AT LAUNCH. It defaulted to 0, so any squad
+        // launching after tick NO_TARGET_IDLE_TIMEOUT_TICKS toward an objective
+        // with no currently-visible hostiles (an unexplored start location by
+        // construction, or a target that moved while we assembled) satisfied
+        // the disband test on its very first Attacking update and dissolved
+        // before moving a single tile — the "bots turtle" symptom.
+        this.lastTargetSeenAt = currentTick;
         this.onLaunch?.();
     }
 
@@ -112,7 +119,7 @@ export class AttackMission extends Mission<AttackFailReason> {
         if (timedOut) {
             if (currentUnits >= partialLaunchFloor) {
                 this.logger(`Attack ${this.getUniqueName()} launching after timeout with ${currentUnits} units.`);
-                this.launch();
+                this.launch(currentTick);
                 return noop();
             }
             return disbandMission(AttackFailReason.UnableToAcquireUnits);
@@ -122,7 +129,7 @@ export class AttackMission extends Mission<AttackFailReason> {
         if (this.requestedUnitCount < this.composition.minimumUnits) {
             if (currentUnits >= partialLaunchFloor) {
                 this.logger(`Attack ${this.getUniqueName()} launching with partial squad (${currentUnits}).`);
-                this.launch();
+                this.launch(currentTick);
                 return noop();
             }
             return disbandMission(AttackFailReason.UnableToAcquireUnits);
@@ -142,7 +149,7 @@ export class AttackMission extends Mission<AttackFailReason> {
             );
             return requestUnits(unitPriorities);
         } else {
-            this.launch();
+            this.launch(currentTick);
             return noop();
         }
     }
@@ -358,6 +365,11 @@ function generateTarget(
             const enemyPlayers = gameApi
                 .getPlayers()
                 .map((p) => gameApi.getPlayerData(p))
+                // getPlayers() still contains defeated players and observers. A
+                // dead player's corner never gets explored, so it stays an
+                // eligible "unexplored enemy base" forever and the bot marches
+                // wave after wave at nothing.
+                .filter((otherPlayer) => otherPlayer.isCombatant && otherPlayer.name !== playerData.name)
                 .filter((otherPlayer) => !gameApi.areAlliedPlayers(playerData.name, otherPlayer.name));
 
             const unexploredEnemyLocations = enemyPlayers.filter((otherPlayer) => {
@@ -452,8 +464,12 @@ export class AttackMissionFactory {
         // Brutal starts a wave up and escalates without limit; easy never
         // leaves the probe waves.
         const difficulty = config?.difficultyId ?? "normal";
+        // waveCostCeiling() saturates to Infinity at wave >= 4, so maxWaveIndex
+        // 4 and 99 were the SAME clamp. Cap each difficulty inside a distinct
+        // tier: easy stays on probes (<=2500), normal tops out mid-tier
+        // (<=6000), only brutal reaches the uncapped tier.
         this.waveIndex = difficulty === "brutal" ? 1 : 0;
-        this.maxWaveIndex = difficulty === "easy" ? 2 : difficulty === "normal" ? 4 : 99;
+        this.maxWaveIndex = difficulty === "easy" ? 1 : difficulty === "normal" ? 3 : 99;
     }
 
     /** Wave ladder cost ceiling for the current escalation index. */

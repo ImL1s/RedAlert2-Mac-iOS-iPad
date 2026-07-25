@@ -95,6 +95,16 @@ export class MatchAwarenessImpl implements MatchAwareness {
 
     private expansionCandidates: Vector2[] = [];
 
+    // These MUST be bot-local elapsed-tick accumulators, not `tick % N`:
+    // onAiUpdate only runs on ticks where (tick + phaseOffset) % tickRatio === 0,
+    // so a global modulo is mathematically unsatisfiable for most phase offsets
+    // (e.g. tickRatio 60 / offset 25 never hits tick % 30 === 0) and the whole
+    // block silently never executes — no threat cache, no rally point, no
+    // expansion candidates for ~7 of 8 bots.
+    private lastThreatUpdateAt = -THREAT_UPDATE_INTERVAL_TICKS;
+    private lastRallyPointUpdateAt = -RALLY_POINT_UPDATE_INTERVAL_TICKS;
+    private lastExpansionUpdateAt = -EXPANSION_UPDATE_INTERVAL_TICKS;
+
     constructor(
         gameApi: GameApi,
         playerData: PlayerData,
@@ -226,7 +236,8 @@ export class MatchAwarenessImpl implements MatchAwareness {
             console.error(`caught error`, hostileUnitIds);
         }
 
-        if (game.getCurrentTick() % THREAT_UPDATE_INTERVAL_TICKS == 0) {
+        if (game.getCurrentTick() >= this.lastThreatUpdateAt + THREAT_UPDATE_INTERVAL_TICKS) {
+            this.lastThreatUpdateAt = game.getCurrentTick();
             let visibility = sectorCache?.getOverallVisibility();
             if (visibility) {
                 this.logger(`${Math.round(visibility * 1000.0) / 10}% of tiles visible. Calculating threat.`);
@@ -260,7 +271,8 @@ export class MatchAwarenessImpl implements MatchAwareness {
         }
 
         // Update rally point every few ticks.
-        if (game.getCurrentTick() % RALLY_POINT_UPDATE_INTERVAL_TICKS === 0) {
+        if (game.getCurrentTick() >= this.lastRallyPointUpdateAt + RALLY_POINT_UPDATE_INTERVAL_TICKS) {
+            this.lastRallyPointUpdateAt = game.getCurrentTick();
             const enemyPlayers = game
                 .getPlayers()
                 .filter((p) => p !== playerData.name && !game.areAlliedPlayers(playerData.name, p));
@@ -276,7 +288,11 @@ export class MatchAwarenessImpl implements MatchAwareness {
         }
 
         // Decide to expand or not
-        if (this.buildSpaceCache.isFinished() && game.getCurrentTick() % EXPANSION_UPDATE_INTERVAL_TICKS === 0) {
+        if (
+            this.buildSpaceCache.isFinished() &&
+            game.getCurrentTick() >= this.lastExpansionUpdateAt + EXPANSION_UPDATE_INTERVAL_TICKS
+        ) {
+            this.lastExpansionUpdateAt = game.getCurrentTick();
             // don't expand somewhere near where we can already build
             const ownBuildingVectors = game
                 .getVisibleUnits(playerData.name, "self", (r) => r.baseNormal)

@@ -49,6 +49,8 @@ function createAtlasRgbaData(bitmap: IndexedBitmap): Uint8Array {
     return rgbaData;
 }
 export class TextureAtlas {
+    /** Every packed atlas still alive, so a context restore can refill them. */
+    private static live = new Set<TextureAtlas>();
     private texture?: THREE.DataTexture;
     private imageRects?: Map<IndexedBitmap, any>;
     private width: number = 0;
@@ -90,13 +92,7 @@ export class TextureAtlas {
         const rgbaData = createAtlasRgbaData(atlasBitmap);
         const texture = new THREE.DataTexture(rgbaData, width, height, THREE.RGBAFormat);
         texture.needsUpdate = true;
-        // Once the GPU upload happens, drop the JS-side pixel copy — three
-        // never frees texture.image.data, which otherwise doubles every
-        // atlas to 8 bytes/pixel in the heap that gets jetsam-killed first.
-        texture.onUpdate = function (this: THREE.DataTexture) {
-            (this.image as any).data = null;
-            this.onUpdate = null as any;
-        } as any;
+        texture.onUpdate = TextureAtlas.dropCpuCopy as any;
         texture.flipY = true;
         texture.minFilter = THREE.NearestFilter;
         texture.magFilter = THREE.NearestFilter;
@@ -105,8 +101,42 @@ export class TextureAtlas {
         this.height = height;
         this.imageRects = imageRects;
         this.texture = texture;
+        TextureAtlas.live.add(this);
+    }
+    /**
+     * Once the GPU upload happens, drop the JS-side pixel copy — three never
+     * frees texture.image.data, which otherwise doubles every atlas to 8
+     * bytes/pixel in the heap that gets jetsam-killed first.
+     */
+    private static dropCpuCopy(this: THREE.DataTexture): void {
+        (this.image as any).data = null;
+        this.onUpdate = null as any;
+    }
+    /**
+     * Rebuild the CPU pixel copy. A WebGL context loss makes three re-upload
+     * every texture from texture.image.data against a fresh properties map;
+     * without this the atlas uploads null and every sprite drawn from it is
+     * fully transparent. Costs nothing at rest — imageRects already holds a
+     * strong reference to each source bitmap.
+     */
+    restore(): void {
+        if (!this.texture || !this.imageRects || (this.texture.image as any).data) {
+            return;
+        }
+        const atlasBitmap = new IndexedBitmap(this.width, this.height);
+        this.imageRects.forEach((rect, image) => {
+            atlasBitmap.drawIndexedImage(image, rect.x, rect.y);
+            extrudeEdges(atlasBitmap, rect.x, rect.y, image.width, image.height);
+        });
+        (this.texture.image as any).data = createAtlasRgbaData(atlasBitmap);
+        this.texture.onUpdate = TextureAtlas.dropCpuCopy as any;
+        this.texture.needsUpdate = true;
+    }
+    static restoreAll(): void {
+        TextureAtlas.live.forEach((atlas) => atlas.restore());
     }
     dispose(): void {
+        TextureAtlas.live.delete(this);
         this.texture?.dispose();
     }
 }

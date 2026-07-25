@@ -28,6 +28,11 @@ export class ArtilleryUnit implements AiBuildingRules {
         return 0;
     }
 
+    /** Background filler like BasicGroundUnit — V3/SREF are doctrine staples. */
+    public getBackgroundWeight(): number {
+        return this.basePriority;
+    }
+
     getMaxCount(
         game: GameApi,
         playerData: PlayerData,

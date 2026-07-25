@@ -32,6 +32,17 @@ export class Harvester extends BasicGroundUnit {
         return this.basePriority * (refineries / Math.max(harvesters / IDEAL_HARVESTERS_PER_REFINERY, 1)) * boost;
     }
 
+    /**
+     * Never a background filler. Without this override the inherited
+     * BasicGroundUnit weight (basePriority = 15) is the HIGHEST weight in the
+     * vehicle pool, so the moment getPriority() returns 0 because the fleet is
+     * already oversized, the bot goes right on buying miners forever — and the
+     * war factory never gets around to tanks.
+     */
+    public getBackgroundWeight(): number {
+        return 0;
+    }
+
     getMaxCount(game: GameApi, playerData: PlayerData, technoRules: TechnoRules, threatCache: GlobalThreat | null): number | null {
         return MAX_HARVESTERS_TOTAL;
     }

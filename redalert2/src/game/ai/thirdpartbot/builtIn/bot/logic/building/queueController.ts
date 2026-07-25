@@ -14,6 +14,7 @@ import { GlobalThreat } from "../threat/threat";
 import { BUILDING_NAME_TO_RULES, TechnoRulesWithPriority, getDefaultPlacementLocation } from "./buildingRules";
 import { BasicGroundUnit } from "./basicGroundUnit";
 import { BasicAirUnit } from "./basicAirUnit";
+import { ArtilleryUnit } from "./artilleryUnit";
 import { SupabotContext } from "../common/context";
 import { UnitRequest } from "../mission/missionController";
 import { EffectiveBotConfig } from "../../../botProfiles";
@@ -194,11 +195,16 @@ export class QueueController {
                 options,
             };
         });
+        // A queue with no top item contributes nothing. `?.` without a
+        // fallback yields `undefined` and `0 + undefined` is NaN — with six
+        // queues at least one is always requestless (Ships always is), so both
+        // totals were NaN every tick, which made the pause-to-save test always
+        // false and every OnHold resume condition unreachable.
         const totalWeightAcrossQueues = this.queueStates
-            .map((decision) => decision.topItem?.priority!)
+            .map((decision) => decision.topItem?.priority ?? 0)
             .reduce((pV, cV) => pV + cV, 0);
         const totalCostAcrossQueues = this.queueStates
-            .map((decision) => decision.topItem?.unit.cost!)
+            .map((decision) => decision.topItem?.unit.cost ?? 0)
             .reduce((pV, cV) => pV + cV, 0);
 
         this.queueStates.forEach((decision) => {
@@ -257,10 +263,15 @@ export class QueueController {
         const { production: productionApi, actions: actionsApi } = player;
         const playerData = game.getPlayerData(player.name);
         const reserve = this.config?.unitReserveCredits ?? 600;
-        if (playerData.credits <= reserve) {
-            return;
+        // The reserve gates DISCRETIONARY army production only. Harvesters are
+        // produced exclusively by the explicitBest branch below (no mission
+        // ever requests one), so returning early here meant a bot that lost
+        // miners while under its reserve could never buy them back — a
+        // permanent economy death spiral, worst on 'boomer' (reserve 1200).
+        const canBuildDiscretionary = playerData.credits > reserve;
+        if (canBuildDiscretionary) {
+            this.updateEnemyCensus(context);
         }
-        this.updateEnemyCensus(context);
         // Doctrine-merged weights (personality x doctrine x country x jitter)
         // when rolled; raw personality weights otherwise.
         const nameWeights = this.config?.matchDoctrine?.mergedUnitWeights ?? this.config?.unitNameWeights ?? {};
@@ -303,7 +314,11 @@ export class QueueController {
                     }
                     continue;
                 }
-                if (rules instanceof BasicGroundUnit || rules instanceof BasicAirUnit) {
+                if (
+                    rules instanceof BasicGroundUnit ||
+                    rules instanceof BasicAirUnit ||
+                    rules instanceof ArtilleryUnit
+                ) {
                     const weight =
                         rules.getBackgroundWeight() * (nameWeights[option.name] ?? 1) * counterWeight(option.name);
                     if (weight > 0) {
@@ -315,7 +330,7 @@ export class QueueController {
                 actionsApi.queueForProduction(queueType, explicitBest.unit.name, explicitBest.unit.type, 1);
                 continue;
             }
-            if (candidates.length === 0) {
+            if (!canBuildDiscretionary || candidates.length === 0) {
                 continue;
             }
             const weights = candidates.map((c) => Math.max(1, Math.round(c.weight * 10)));
@@ -469,6 +484,13 @@ export class QueueController {
             // resume when priority or credits justify it.
             if (!isBuildingQueue(queueType)) {
                 logger(`Resuming unit queue ${queueTypeToName(queueData.type)}`);
+                actionsApi.resumeProduction(queueData.type);
+            } else if (!decision) {
+                // Nothing requests this queue any more, so the weight test
+                // below can never pass. Resume it so the Active/Ready handlers
+                // can clear the item instead of leaving it frozen forever
+                // (ProductionTrait.tickQueue skips non-Active queues).
+                logger(`Resuming queue ${queueTypeToName(queueData.type)} because nothing is requested`);
                 actionsApi.resumeProduction(queueData.type);
             } else if (myCredits >= totalCostAcrossQueues) {
                 logger(`Resuming queue ${queueTypeToName(queueData.type)} because credits are high`);

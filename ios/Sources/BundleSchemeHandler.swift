@@ -19,7 +19,12 @@ final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
     private let webRoot: URL
     private let gameResRoot: URL
     private let ioQueue = DispatchQueue(label: "ra2.scheme.io", qos: .userInitiated)
-    private var cancelledTasks = Set<ObjectIdentifier>()
+    /// One-way cancellation flag, one per streaming task. The I/O block holds
+    /// the object directly, so cleanup can never "un-cancel" a task ahead of an
+    /// already-queued callback, and a recycled task address can never make a
+    /// fresh task look pre-cancelled.
+    private final class StreamState { var cancelled = false }
+    private var streamStates = [ObjectIdentifier: StreamState]()
     private let cancelLock = NSLock()
 
     override init() {
@@ -29,14 +34,25 @@ final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
         super.init()
     }
 
-    private func isCancelled(_ task: WKURLSchemeTask) -> Bool {
+    private func register(_ task: WKURLSchemeTask) -> StreamState {
+        let state = StreamState()
         cancelLock.lock(); defer { cancelLock.unlock() }
-        return cancelledTasks.contains(ObjectIdentifier(task))
+        // Overwrite unconditionally: ObjectIdentifier is the task's address and
+        // a previously freed task may have occupied it.
+        streamStates[ObjectIdentifier(task)] = state
+        return state
     }
 
-    private func clearCancelled(_ task: WKURLSchemeTask) {
+    private func unregister(_ task: WKURLSchemeTask, _ state: StreamState) {
         cancelLock.lock(); defer { cancelLock.unlock() }
-        cancelledTasks.remove(ObjectIdentifier(task))
+        if streamStates[ObjectIdentifier(task)] === state {
+            streamStates.removeValue(forKey: ObjectIdentifier(task))
+        }
+    }
+
+    private func isCancelled(_ state: StreamState) -> Bool {
+        cancelLock.lock(); defer { cancelLock.unlock() }
+        return state.cancelled
     }
 
     func webView(_ webView: WKWebView, start urlSchemeTask: WKURLSchemeTask) {
@@ -48,6 +64,14 @@ final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
         if path.isEmpty || path == "/" { path = "/index.html" }
         // Strip query strings vite appends for cache busting (?v=...)
         let relative = String(path.dropFirst())
+
+        // Reject any traversal attempt before touching the filesystem: a
+        // request like /gameres/../../Documents/x would otherwise escape the
+        // bundle roots and serve arbitrary app-container files.
+        if relative.split(separator: "/").contains("..") {
+            respond(urlSchemeTask, url: url, status: 403, mime: "text/plain", data: Data("forbidden".utf8))
+            return
+        }
 
         let fileURL: URL
         if relative.hasPrefix("gameres/") {
@@ -78,8 +102,14 @@ final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
     }
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: WKURLSchemeTask) {
+        // WebKit delivers scheme-handler callbacks on the main thread; the
+        // check-then-call inside the streaming main.sync blocks relies on that
+        // to be atomic against this method.
+        dispatchPrecondition(condition: .onQueue(.main))
         cancelLock.lock()
-        cancelledTasks.insert(ObjectIdentifier(urlSchemeTask))
+        // Mark AND unregister: the flag survives on the I/O block's captured
+        // reference, so the address is free to be reused by a later task.
+        streamStates.removeValue(forKey: ObjectIdentifier(urlSchemeTask))?.cancelled = true
         cancelLock.unlock()
     }
 
@@ -98,31 +128,37 @@ final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
         }
         task.didReceive(response)
 
+        let state = register(task)
         ioQueue.async { [weak self] in
             guard let self else { return }
-            defer { self.clearCancelled(task) }
+            defer { self.unregister(task, state) }
             guard let handle = try? FileHandle(forReadingFrom: fileURL) else {
-                DispatchQueue.main.async { task.didFailWithError(URLError(.cannotOpenFile)) }
+                DispatchQueue.main.sync {
+                    if !self.isCancelled(state) { task.didFailWithError(URLError(.cannotOpenFile)) }
+                }
                 return
             }
             defer { try? handle.close() }
             var delivered = 0
             var stopped = false
             while delivered < size && !stopped {
-                if self.isCancelled(task) { return }
+                if self.isCancelled(state) { return }
                 guard let chunk = try? handle.read(upToCount: Self.chunkSize), !chunk.isEmpty else { break }
                 delivered += chunk.count
                 let done = delivered >= size
                 DispatchQueue.main.sync {
-                    if self.isCancelled(task) { stopped = true; return }
+                    if self.isCancelled(state) { stopped = true; return }
                     task.didReceive(chunk)
                     if done { task.didFinish() }
                 }
             }
             if stopped { return }
             if delivered < size {
-                DispatchQueue.main.async {
-                    if !self.isCancelled(task) { task.didFailWithError(URLError(.cannotLoadFromNetwork)) }
+                // main.SYNC under the state flag: an async block here outlives
+                // the defer'd cleanup, and calling into a task WebKit already
+                // stopped raises an uncatchable ObjC exception.
+                DispatchQueue.main.sync {
+                    if !self.isCancelled(state) { task.didFailWithError(URLError(.cannotLoadFromNetwork)) }
                 }
             }
         }
@@ -160,7 +196,8 @@ final class BundleSchemeHandler: NSObject, WKURLSchemeHandler {
         case "wav": return "audio/wav"
         case "webm": return "video/webm"
         case "mp4": return "video/mp4"
-        case "woff", "woff2": return "font/woff2"
+        case "woff": return "font/woff"
+        case "woff2": return "font/woff2"
         case "ttf": return "font/ttf"
         case "ini", "csf", "mix", "map", "mpr": return "application/octet-stream"
         default:

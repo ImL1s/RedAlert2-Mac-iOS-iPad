@@ -34,7 +34,10 @@ const CASH_RICH_THRESHOLD = 5000;
 // Retail difficulty texture (probed rulesmd): easy AIs are nearly undefended
 // (6 statics vs 25 on brutal), run leaner economies (AIExtraRefineries=2,1,0;
 // AISlaveMinerNumber=4,3,2).
-const DEFENSE_CAP_BY_DIFFICULTY: Record<string, number> = { brutal: 25, normal: 20, easy: 6 };
+// Must sit BELOW the sum of the per-type limits in buildingRules.ts (~10-12 per
+// faction) or the difficulty budget can never bind and every difficulty
+// fortifies identically.
+const DEFENSE_CAP_BY_DIFFICULTY: Record<string, number> = { brutal: 11, normal: 7, easy: 3 };
 const EXTRA_REFINERIES_BY_DIFFICULTY: Record<string, number> = { brutal: 2, normal: 1, easy: 0 };
 const SLAVE_MINERS_BY_DIFFICULTY: Record<string, number> = { brutal: 4, normal: 3, easy: 2 };
 const REFINERY_NAMES = new Set(["GAREFN", "NAREFN"]);
@@ -98,19 +101,19 @@ export class BaseBuildingMission extends Mission {
                     playerData,
                     context.matchAwareness.getThreatCache(),
                 );
-                // The rule for this structure now says stop (its cap was hit
-                // while it was in production). Do NOT keep requesting it at a
-                // floor priority: the dangling request re-queues the same
-                // structure the moment it completes, before this mission gets
-                // another look at an idle queue — that loop is how a bot ends
-                // up with 7 power plants (or 20 bio reactors) and no barracks.
-                // With no request, the queue controller cancels it at Ready
-                // and the next pass re-evaluates all options honestly.
-                if (priority <= 0) {
+                // NEGATIVE = hard count cap: stop requesting so the queue
+                // controller cancels at Ready (the bio-reactor/power-plant
+                // farm fix — the dangling request otherwise re-queues the same
+                // structure forever). Priority exactly 0 is TRANSIENT ("not
+                // wanted right now": credits momentarily at 0 on an
+                // onlyBuildWhenFloatingCredits structure, or the threat that
+                // justified a defence receded) — dropping the request there
+                // makes the bot build to 100% and refund, forever. Finish it.
+                if (priority < 0) {
                     this.cachedPlacement = null;
                     return noop();
                 }
-                return buildStructureAtLocation(current.name, priority, location.rx, location.ry);
+                return buildStructureAtLocation(current.name, Math.max(priority, 1), location.rx, location.ry);
             }
             return noop();
         }
@@ -131,7 +134,7 @@ export class BaseBuildingMission extends Mission {
 
         const bestOption = maxBy(optionWithPriority, (option) => option.priority);
 
-        if (!bestOption || bestOption.priority === 0) {
+        if (!bestOption || bestOption.priority <= 0) {
             return noop();
         }
 
@@ -168,7 +171,7 @@ export class BaseBuildingMission extends Mission {
             if (priority > 0 && !(option as any).isBaseDefense && !(logic instanceof PowerPlant)) {
                 const copies = game.getVisibleUnits(playerStatus.name, "self", (r) => r.name === option.name).length;
                 if (copies >= SAME_STRUCTURE_HARD_CAP) {
-                    return 0;
+                    return -1;
                 }
             }
             // Personality flavor: turtles fortify and tech, rushers skip both.
@@ -179,21 +182,21 @@ export class BaseBuildingMission extends Mission {
                     const defenseCap = DEFENSE_CAP_BY_DIFFICULTY[this.config.difficultyId] ?? 20;
                     const owned = game.getVisibleUnits(playerStatus.name, "self", (r) => (r as any).isBaseDefense).length;
                     if (owned >= defenseCap) {
-                        priority = 0;
+                        return -1;
                     }
                 } else if (REFINERY_NAMES.has(option.name)) {
                     // Retail AIExtraRefineries: 1 + {2,1,0} by difficulty.
                     const refineryCap = 1 + (EXTRA_REFINERIES_BY_DIFFICULTY[this.config.difficultyId] ?? 1);
                     const owned = game.getVisibleUnits(playerStatus.name, "self", (r) => r.name === option.name).length;
                     if (owned >= refineryCap) {
-                        priority = 0;
+                        return -1;
                     }
                 } else if (option.name === SLAVE_MINER_NAME) {
                     // Retail AISlaveMinerNumber: 4/3/2 by difficulty.
                     const minerCap = SLAVE_MINERS_BY_DIFFICULTY[this.config.difficultyId] ?? 3;
                     const owned = game.getVisibleUnits(playerStatus.name, "self", (r) => r.name === SLAVE_MINER_NAME).length;
                     if (owned >= minerCap) {
-                        priority = 0;
+                        return -1;
                     }
                 } else if (TECH_STRUCTURE_NAMES.has(option.name)) {
                     priority *= this.config.techPriorityMultiplier * (this.config.matchDoctrine?.doctrine.techPriorityMultiplier ?? 1);

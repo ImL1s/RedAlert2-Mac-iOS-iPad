@@ -76,6 +76,14 @@ export class SoundHandler {
     private disposables = new CompositeDisposable();
     private lastFeedbackTime?: number;
     private weaponLoopHandles = new Map<any, { handle: any; soundName: string }>();
+    // Report -> is it a Loop/Ambient spec. getSoundSpec() is not memoised and
+    // console.warn()s for every report with no sound.ini section (e.g.
+    // GuardianGIDeployedAttack, SILENCER, JUMPJET1), so resolving it per shot
+    // on the hottest event in the game is a real cost on device.
+    private loopingReportCache = new Map<string, boolean>();
+    // sound.ini caps GattlingGunAttackLoop1/2/3 at Limit=2 each; anything past
+    // ~6 loops is hard-muted by WorldSound yet still schedules audio forever.
+    private static readonly MAX_WEAPON_LOOPS = 6;
     private weaponLoopTimer?: ReturnType<typeof setInterval>;
     constructor(private game: any, private worldSound: any, private eva: any, private sound: any, private gameEvents: any, private messageList: any, private strings: any, private player: any) { }
     init(): void {
@@ -208,8 +216,12 @@ export class SoundHandler {
         const volume = weapon.warhead.rules.electricAssault ? 0.25 : 1;
         const soundIndex = Math.floor(Math.random() * weapon.rules.report.length);
         const soundName = weapon.rules.report[soundIndex];
-        const spec = this.sound.getSoundSpec?.(soundName);
-        const isLoop = !!spec && (spec.control.has(SoundControl.Loop) || spec.control.has(SoundControl.Ambient));
+        let isLoop = this.loopingReportCache.get(soundName);
+        if (isLoop === undefined) {
+            const spec = this.sound.getSoundSpec?.(soundName);
+            isLoop = !!spec && (spec.control.has(SoundControl.Loop) || spec.control.has(SoundControl.Ambient));
+            this.loopingReportCache.set(soundName, isLoop);
+        }
         if (!isLoop) {
             this.worldSound.playEffect(soundName, gameObject.position.worldPosition, gameObject.owner, volume);
             return;
@@ -223,6 +235,10 @@ export class SoundHandler {
             }
             existing.handle.stop(); // stage changed: retire the old loop (plays its decay tail)
             this.weaponLoopHandles.delete(gameObject);
+        }
+        // Refuse to open more loops than can physically be audible.
+        if (this.weaponLoopHandles.size >= SoundHandler.MAX_WEAPON_LOOPS) {
+            return;
         }
         // Pass the game object itself so the loop follows the shooter and is
         // auto-stopped by WorldSound.handleObjectRemoved on death/removal.
@@ -245,7 +261,7 @@ export class SoundHandler {
                 !gameObject.isCrashing &&
                 !!attackTrait &&
                 !attackTrait.isDisabled() &&
-                ((!!currentTask && /Attack/.test(currentTask.constructor?.name ?? '')) ||
+                ((!!currentTask && (currentTask as any)[Symbol.for("ra2.isAttackTask")] === true) ||
                     !attackTrait.isIdle() ||
                     !!attackTrait.opportunityFireTask);
             if (!engaged) {

@@ -38,6 +38,10 @@ export class BatchableAction {
         return new BatchableAction(unitId, orderType, undefined, targetId, nonce);
     }
 
+    public get nonce() {
+        return this._nonce;
+    }
+
     public get unitId() {
         return this._unitId;
     }
@@ -132,13 +136,22 @@ export class ActionBatcher {
                 );
             });
             // Actions with no targets
+            // No-target actions, grouped by nonce. DeploySelected is a TOGGLE
+            // and OrderUnitsAction.process() forwards ONLY the already-
+            // undeployed members of a batch whenever any exist — mixing a
+            // deploy (nonce 0) with an undeploy (nonce 1) discarded every
+            // undeploy, and the value-dedupe swallowed the identical retry,
+            // leaving deployed GIs/Desolators frozen for the whole match.
+            // Object.keys over integer-like keys iterates in ascending numeric
+            // order — lockstep-deterministic.
             const noTargets = commands.filter((command) => !command.targetId && !command.point);
-            if (noTargets.length > 0) {
+            const byNonce = groupBy(noTargets, (command) => command.nonce.toString());
+            Object.values(byNonce).forEach((unitCommands) => {
                 actionsApi.orderUnits(
-                    noTargets.map((action) => action.unitId),
+                    unitCommands.map((action) => action.unitId),
                     commandType,
                 );
-            }
+            });
         });
     }
 }

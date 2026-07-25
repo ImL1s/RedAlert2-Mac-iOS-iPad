@@ -179,7 +179,11 @@ export class ActionsApi {
                 targetObject = undefined;
                 const tile = this.game.map.tiles.getByMapCoords(targetX, targetY);
                 if (!tile) {
-                    throw new Error(`No tile found at rx,ry=${targetX},${targetY}`);
+                    // Never throw into a bot tick: a bot computing an off-map
+                    // destination must lose ONE order, not abort its whole
+                    // mission update. Same policy as ActivateSuperWeaponAction.
+                    console.warn(`[ActionsApi] orderUnits: no tile at rx,ry=${targetX},${targetY}; order dropped`);
+                    return;
                 }
                 targetTile = tile;
                 if (useBridge) {

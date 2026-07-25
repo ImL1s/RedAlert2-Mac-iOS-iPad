@@ -1,7 +1,7 @@
 import { ActionsApi, BotContext, GameApi, GameObjectData, PlayerData, UnitData, Vector2 } from "../../../../game-api";
 import { MatchAwareness } from "../../awareness";
 import { MissionController } from "../missionController";
-import { Mission, MissionAction, grabCombatants, noop, releaseUnits, requestUnits } from "../mission";
+import { Mission, MissionAction, disbandMission, grabCombatants, noop, releaseUnits, requestUnits } from "../mission";
 import { CombatSquad } from "./squads/combatSquad";
 import { DebugLogger, isOwnedByNeutral, toVector2 } from "../../common/utils";
 import { ActionBatcher } from "../actionBatcher";
@@ -34,6 +34,31 @@ export class DefenceMission extends Mission<CombatSquad> {
     }
 
     _onAiUpdate(context: MissionContext): MissionAction {
+        {
+            const { game } = context;
+            // The defended point is a snapshot of a base anchor's tile at
+            // creation time and this mission has NO other exit, so it outlives
+            // the thing it defends. Left alone it answers hostiles near the
+            // crater at MAX_PRIORITY and conscripts everything within
+            // DEFENCE_GRAB_RADIUS to defend rubble, outbidding the squads and
+            // the live base that still need those units.
+            const anchorAlive = game
+                .getVisibleUnits(
+                    context.player.name,
+                    "self",
+                    (r) => r.constructionYard || r.name === "AMCV" || r.name === "SMCV" || r.name === "PCV",
+                )
+                .map((unitId) => game.getGameObjectData(unitId))
+                .some((unit) => !!unit && new Vector2(unit.tile.rx, unit.tile.ry).distanceTo(this.defenceArea) <= 5);
+            if (!anchorAlive) {
+                this.priority = 0;
+                if (this.getUnitIds().length > 0) {
+                    this.logger(`(Defence Mission ${this.getUniqueName()}): defended base is gone, releasing units.`);
+                    return releaseUnits(this.getUnitIds());
+                }
+                return disbandMission(undefined);
+            }
+        }
         const { game, matchAwareness } = context;
         // Dispatch missions.
         const foundTargets = matchAwareness
@@ -136,7 +161,13 @@ export class DefenceMissionFactory {
     private getDefendablePoints(context: SupabotContext) {
         const { game, player } = context;
         return game
-            .getVisibleUnits(player.name, "self", (r) => r.constructionYard || r.name === "AMCV" || r.name === "SMCV")
+            .getVisibleUnits(
+                player.name,
+                "self",
+                // "PCV" is Yuri's MCV — omitting it left a Yuri bot holding
+                // only an undeployed MCV with no defendable point at all.
+                (r) => r.constructionYard || r.name === "AMCV" || r.name === "SMCV" || r.name === "PCV",
+            )
             .map((unitId) => game.getGameObjectData(unitId))
             .filter((unit): unit is GameObjectData => unit != null)
             .map((unit) => toVector2(unit.tile));

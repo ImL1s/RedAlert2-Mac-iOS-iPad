@@ -24,6 +24,25 @@ for arg in "$@"; do
   esac
 done
 
+# AI liveness gate. Static review and "it didn't crash" soaks have repeatedly
+# missed bots that silently stopped thinking (dead mission gate), got demoted
+# (lobby difficulty sanitizer) or spammed one structure (queue cancel loop).
+# scripts/ai-liveness-probe.js asserts those invariants live in the desktop
+# lab; it needs WebGL + game resources, so it cannot run in this script.
+if [[ $DEVICE -eq 1 && "${RA2_LIVENESS_OK:-0}" != "1" ]]; then
+  cat >&2 <<'EOF'
+error: AI liveness check not confirmed for this device build.
+
+  1. cd redalert2 && bun --bun vite dev
+  2. Skirmish on an 8-player map with 6 AI slots: 2 Easy, 2 Normal, 2 Brutal.
+  3. Start the match, open the console, paste scripts/ai-liveness-probe.js
+  4. await RA2Liveness.run()   -> every row must read "pass", footer "PASS"
+  5. RA2_LIVENESS_OK=1 ./scripts/build-ios.sh --device
+
+EOF
+  exit 1
+fi
+
 # App identity per variant so both can coexist on a device.
 if [[ "$VARIANT" == "ra2" ]]; then
   export RA2_BUNDLE_ID="${RA2_BUNDLE_ID:-com.ammaar.ra2classic}"

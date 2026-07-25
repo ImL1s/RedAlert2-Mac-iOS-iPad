@@ -51,10 +51,19 @@ export class MissionController {
         this.missions.forEach((mission) => {
             const toRemove: number[] = [];
             mission.getUnitIds().forEach((unitId) => {
+                const unit = botContext.game.getGameObjectData(unitId);
                 if (this.unitIdToMission.has(unitId)) {
                     this.logger(`WARNING: unit ${unitId} is in multiple missions, please debug.`);
-                } else if (!botContext.game.getGameObjectData(unitId)) {
+                } else if (!unit) {
                     // say, if a unit was killed
+                    toRemove.push(unitId);
+                } else if (unit.owner !== undefined && unit.owner !== botContext.player.name) {
+                    // Ownership changed under us: mind control, Psychic
+                    // Dominator, a hijacked vehicle. The object still exists so
+                    // the death check misses it, and the mission would keep
+                    // COUNTING it (never reaching 0 units, never disbanding)
+                    // and keep dragging the squad toward wherever the enemy
+                    // drives it.
                     toRemove.push(unitId);
                 } else {
                     this.unitIdToMission.set(unitId, mission);

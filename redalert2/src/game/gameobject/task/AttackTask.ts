@@ -43,7 +43,12 @@ interface Position {
     tile: any;
     onBridge?: any;
 }
+// Class names are mangled by esbuild in production builds, so anything that
+// wants to recognise an attack task must not rely on constructor.name.
+export const IS_ATTACK_TASK = Symbol.for("ra2.isAttackTask");
+
 export class AttackTask extends Task {
+    [IS_ATTACK_TASK] = true;
     public game: any;
     private target: any;
     private weapon: any;

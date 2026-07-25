@@ -4,6 +4,16 @@ import WebKit
 final class GameViewController: UIViewController, WKNavigationDelegate {
     private var webView: WKWebView!
     private var contentProcessCrashCount = 0
+    /// Monotonic clock, so a device-clock change cannot confuse the loop check.
+    private var lastCrashTime: CFTimeInterval = 0
+    private var crashNotice: UILabel?
+
+    /// A jetsam kill during the 750MB first-launch seed is deterministic, so an
+    /// uncapped reload is an infinite zero-progress loop. Retry a few times
+    /// with backoff, then stop and say so.
+    private static let maxAutoRecoveries = 3
+    /// A crash this long after the previous one is a fresh incident, not a loop.
+    private static let crashLoopWindow: CFTimeInterval = 300
 
     override var prefersHomeIndicatorAutoHidden: Bool { true }
     override var prefersStatusBarHidden: Bool { true }
@@ -67,10 +77,47 @@ final class GameViewController: UIViewController, WKNavigationDelegate {
     // The web content process was killed (almost always jetsam memory pressure
     // during game load). Without this handler the view goes blank/limbo; with a
     // plain reload the user silently loses their session. Reload and mark the
-    // boot as crash recovery.
+    // boot as crash recovery — but only a bounded number of times, because the
+    // fault that kills us is usually deterministic and would otherwise loop.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        let now = CACurrentMediaTime()
+        if now - lastCrashTime > Self.crashLoopWindow { contentProcessCrashCount = 0 }
+        lastCrashTime = now
         contentProcessCrashCount += 1
-        NSLog("[RA2] Web content process terminated (count=%d) — reloading", contentProcessCrashCount)
-        loadApp(crashed: true)
+        NSLog("[RA2] Web content process terminated (count=%d)", contentProcessCrashCount)
+
+        guard contentProcessCrashCount <= Self.maxAutoRecoveries else {
+            NSLog("[RA2] Giving up after %d consecutive terminations", contentProcessCrashCount)
+            showUnrecoverableNotice()
+            return
+        }
+        // Back off: an immediate reload of a deterministic OOM pins the CPU
+        // and the disk and drains the battery with nothing on screen.
+        let delay = pow(2.0, Double(contentProcessCrashCount - 1))
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.loadApp(crashed: true)
+        }
+    }
+
+    private func showUnrecoverableNotice() {
+        guard crashNotice == nil else { return }
+        let label = UILabel()
+        label.numberOfLines = 0
+        label.textAlignment = .center
+        label.textColor = .white
+        label.font = .monospacedSystemFont(ofSize: 15, weight: .regular)
+        label.text = """
+        Red Alert 2 ran out of memory and could not recover.
+
+        Close other apps, restart the device, and launch again.
+        """
+        label.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(label)
+        NSLayoutConstraint.activate([
+            label.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            label.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            label.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, multiplier: 0.8),
+        ])
+        crashNotice = label
     }
 }

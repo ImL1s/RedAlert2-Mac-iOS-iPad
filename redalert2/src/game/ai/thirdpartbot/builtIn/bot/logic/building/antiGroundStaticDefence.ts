@@ -6,10 +6,10 @@ import { getStaticDefencePlacement } from "./common";
 
 export class AntiGroundStaticDefence implements AiBuildingRules {
     constructor(
-        private basePriority: number,
-        private baseAmount: number,
-        private groundStrength: number,
-        private limit: number,
+        protected basePriority: number,
+        protected baseAmount: number,
+        protected groundStrength: number,
+        protected limit: number,
     ) {}
 
     getPlacementLocation(
@@ -51,5 +51,45 @@ export class AntiGroundStaticDefence implements AiBuildingRules {
         threatCache: GlobalThreat | null,
     ): number | null {
         return null;
+    }
+}
+
+/**
+ * Base defence that shoots BOTH air and ground (Yuri's Gattling Cannon is the
+ * faction's only AA structure). Takes the higher of the anti-ground and the
+ * anti-air response so a Yuri bot answers rocketeers/Kirovs the way NASAM and
+ * NAFLAK let the other two sides. Still an AntiGroundStaticDefence, so the
+ * per-difficulty defence cap and defensePriorityMultiplier in
+ * baseBuildingMission still apply.
+ */
+export class DualPurposeStaticDefence extends AntiGroundStaticDefence {
+    constructor(
+        basePriority: number,
+        baseAmount: number,
+        groundStrength: number,
+        limit: number,
+        private airStrength: number,
+    ) {
+        super(basePriority, baseAmount, groundStrength, limit);
+    }
+
+    getPriority(
+        game: GameApi,
+        playerData: PlayerData,
+        technoRules: TechnoRules,
+        threatCache: GlobalThreat | null,
+    ): number {
+        if (numBuildingsOwnedOfType(game, playerData, technoRules) >= this.limit) {
+            return 0;
+        }
+        const groundPriority = super.getPriority(game, playerData, technoRules, threatCache);
+        let airPriority = 0;
+        if (threatCache) {
+            const denominator = threatCache.totalAvailableAntiAirFirepower + this.airStrength;
+            if (threatCache.totalOffensiveAirThreat > denominator * 1.1) {
+                airPriority = this.basePriority * (threatCache.totalOffensiveAirThreat / Math.max(1, denominator));
+            }
+        }
+        return Math.max(groundPriority, airPriority);
     }
 }
