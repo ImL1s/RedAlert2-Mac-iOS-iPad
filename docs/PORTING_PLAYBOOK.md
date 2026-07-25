@@ -588,6 +588,45 @@ happen.
 
 ---
 
+## 13. The failsafe that ate the AI (and how to never ship it again)
+
+Three bugs shipped in sequence that made the whole AI look broken while
+throwing no errors and costing no measurable performance. They are worth
+naming, because they share one shape: **silent behavioural death**.
+
+1. **A stale validator.** The lobby sanitised saved AI settings against a
+   list written before Brutal existed, so every restored Brutal slot was
+   demoted to Easy - and re-saved that way.
+2. **A gate that could never fire.** Bot updates run on
+   `(tick + phaseOffset) % tickRatio === 0`; the mission layer was gated
+   *inside* that on `tick % 3 === 0`. When `tickRatio % 3 == 0` and
+   `phaseOffset % 3 != 0` the two are never simultaneously true, so those
+   bots never ran a single mission - no attacks, no garrisons, no
+   superweapons - for the entire match.
+3. **A "failsafe" competing with the real bot.** A safety net meant to
+   unstick a dead bot queued buildings directly, bypassing the mission
+   system. Whenever the starter build order was complete it fell through to
+   "extra power is always useful" and queued another power plant - forever.
+   Worse, the queue controller cancels anything it did not request, so the
+   two fought in a queue/cancel loop that burned the economy. This is the
+   true origin of both the twenty-bio-reactor report and the "AI does
+   nothing" reports.
+
+**The lesson:** a bot that does nothing throws nothing. Error-free soak
+tests and per-tick profiling both passed while two thirds of the AI was
+inert. Liveness has to be asserted explicitly, so it now is:
+`scripts/ai-liveness-probe.js` runs a mixed-difficulty match headlessly and
+fails if any bot stops building varied structures, stops forming attack
+missions, never projects force away from home, spams one structure, or
+accumulates queue cancels. Run it before any device build that touches bot
+scheduling, production, or difficulty.
+
+Corollaries worth keeping: never nest a global-tick modulus inside a
+phase-offset gate (use a per-bot counter); never let a fallback path write
+to a queue the main system owns; and measure liveness, not just errors.
+
+---
+
 ## Appendix: reproducing an asset build
 
 ```sh

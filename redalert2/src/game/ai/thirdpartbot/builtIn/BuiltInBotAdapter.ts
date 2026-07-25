@@ -18,6 +18,10 @@ export class BuiltInBotAdapter extends Bot {
     private failSafePendingBuildingType: string | null = null;
     private lastFailSafeDeployTick: number = -9999;
     private failSafeDeployAttempts: number = 0;
+    /** Last tick the real bot threw. The queueing failsafe only runs after one. */
+    private lastInnerBotErrorTick: number = -Infinity;
+    /** Ticks the real bot gets to act before the failsafe considers it stalled. */
+    private static readonly FAIL_SAFE_GRACE_TICKS = 900;
 
     private static readonly ALLIED_COUNTRIES = [
         'Americans', 'British', 'French', 'Germans', 'Koreans', 'Alliance',
@@ -75,6 +79,7 @@ export class BuiltInBotAdapter extends Bot {
         } catch (e) {
             this.logger?.error?.('BuiltInBot tick error:', e);
             console.error(`[BuiltInBotAdapter] tick error for "${this.name}":`, e);
+            this.lastInnerBotErrorTick = event?.getCurrentTick?.() ?? 0;
             // Keep the AI alive even if the imported bot throws.
             this.runFailSafeTick(event);
             return;
@@ -178,6 +183,27 @@ export class BuiltInBotAdapter extends Bot {
             return;
         }
 
+        // Everything below QUEUES buildings directly, bypassing the real bot's
+        // mission/request system. When the real bot is healthy that is actively
+        // harmful: the queue controller cancels anything it did not request
+        // ("Cancelling ready X because no one is requesting anymore"), so the
+        // two fight in a queue/cancel loop that burns the whole economy — and
+        // the old "extra power is always useful" filler below turned that loop
+        // into the endless power-plant / bio-reactor farm. Only act as a true
+        // failsafe: the real bot has thrown recently, or it has failed to
+        // establish even a minimal base long past the point it should have.
+        const tick = gameApi.getCurrentTick();
+        const recentlyErrored = tick - this.lastInnerBotErrorTick < BuiltInBotAdapter.FAIL_SAFE_GRACE_TICKS;
+        const ownedBuildingCount = gameApi.getVisibleUnits(
+            this.name,
+            'self',
+            (r: any) => r.type === ObjectType.Building,
+        ).length;
+        const stalledEarly = ownedBuildingCount <= 1 && tick > BuiltInBotAdapter.FAIL_SAFE_GRACE_TICKS;
+        if (!recentlyErrored && !stalledEarly) {
+            return;
+        }
+
         const available = this.productionApi
             .getAvailableObjects(QueueType.Structures)
             .map((o: any) => o.name);
@@ -198,16 +224,19 @@ export class BuiltInBotAdapter extends Bot {
                 .filter((n: any) => !!n),
         );
 
+        // Only ever bootstrap the basic base. If the bot already owns the whole
+        // starter list, the failsafe has nothing legitimate left to do — the
+        // real bot decides what comes next. (The old code fell through to
+        // "queue another power plant" here, forever.)
         let nextBuild = buildOrder.find((name) => available.includes(name) && !ownedBuildingNames.has(name));
 
-        // Whole list owned already — extra power is the only always-useful filler.
+        // Predefined order unavailable for this ruleset/mod: take one unowned
+        // structure so a broken bot is not deadlocked, but never a duplicate.
         if (!nextBuild) {
-            nextBuild = buildOrder.find((name) => name.endsWith('POWR') && available.includes(name));
+            nextBuild = available.find((name: string) => !ownedBuildingNames.has(name));
         }
-
-        // If predefined order is unavailable for this ruleset/mod, build any available structure to avoid deadlock.
         if (!nextBuild) {
-            nextBuild = available.find((name: string) => !ownedBuildingNames.has(name)) ?? available[0];
+            return;
         }
 
         if (nextBuild) {
