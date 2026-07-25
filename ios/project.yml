@@ -48,10 +48,11 @@ targets:
             UIWindowSceneSessionRoleApplication:
               - UISceneConfigurationName: Default
                 UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
-    entitlements:
-      path: Sources/RA2.entitlements
-      properties:
-        com.apple.developer.kernel.increased-memory-limit: true
+    # NOTE: com.apple.developer.kernel.increased-memory-limit (Sources/
+    # RA2.entitlements) is prepared but not wired: the team's automatic
+    # provisioning profile lacks the capability. Enable "Increased Memory
+    # Limit" for the App ID in the developer portal, then re-add:
+    #   entitlements: { path: Sources/RA2.entitlements }
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ${RA2_BUNDLE_ID}
