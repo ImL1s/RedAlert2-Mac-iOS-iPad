@@ -291,10 +291,7 @@ export class QueueController {
                 continue;
             }
             const queueState = this.queueStates.find((state) => state.queue === queueType);
-            if (queueState?.topItem) {
-                // A mission requested something here; the normal flow handles it.
-                continue;
-            }
+            const missionWantsThisQueue = !!queueState?.topItem;
             // Reuse the availability computed at the top of this update — the
             // engine recomputes the whole tech tree on every call.
             const options = queueState?.options ?? productionApi.getAvailableObjects(queueType);
@@ -326,8 +323,20 @@ export class QueueController {
                     }
                 }
             }
+            // Economy first, unconditionally. Harvesters have no background
+            // weight and no mission ever requests one, so they exist ONLY on
+            // this branch — and this whole block used to be skipped the moment
+            // any mission wanted a vehicle. An ExpansionMission asking for an
+            // MCV therefore froze miner production for as long as it lived,
+            // which is how bots ended up with two refineries and one miner
+            // while Yuri (whose slave miners spawn free from the refinery and
+            // never touch a queue) looked like the only competent faction.
             if (explicitBest) {
                 actionsApi.queueForProduction(queueType, explicitBest.unit.name, explicitBest.unit.type, 1);
+                continue;
+            }
+            if (missionWantsThisQueue) {
+                // Nothing economic to buy; let the mission's request have the queue.
                 continue;
             }
             if (!canBuildDiscretionary || candidates.length === 0) {

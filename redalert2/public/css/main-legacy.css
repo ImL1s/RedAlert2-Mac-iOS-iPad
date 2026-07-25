@@ -4,13 +4,24 @@ html, body {
 
 body {
     margin: 0;
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+    /* Top/left/right keep content clear of a notch or camera housing. The
+       BOTTOM inset is deliberately 0: it only guards the home indicator, which
+       the native shell already auto-hides (prefersHomeIndicatorAutoHidden), and
+       reserving 25px there cost a visible dead strip along the bottom edge on
+       iPad. Whatever padding does apply is subtracted from the available size
+       in Application.getAvailableDisplaySize — measuring the full visual
+       viewport while the root is centred in a smaller content box is what
+       clipped ~12px off the top of the menus. */
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
     box-sizing: border-box;
     overflow: hidden;
     display: flex;
     justify-content: center;
     align-items: center;
-    background: rgba(0, 0, 0, .75);
+    /* Opaque. A translucent document backdrop makes WebKit blend a full-screen
+       layer under the canvas every single frame, and it showed as a washed band
+       in the letterbox. */
+    background: #000;
     overscroll-behavior: none;
 }
 

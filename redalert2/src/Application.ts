@@ -307,11 +307,26 @@ export class Application {
     }
     private getAvailableDisplaySize(): { width: number; height: number; } {
         const viewport = window.visualViewport;
-        const width = Math.floor(viewport?.width ?? window.innerWidth ?? document.documentElement.clientWidth ?? Application.MOBILE_BASE_VIEWPORT.width);
-        const height = Math.floor(viewport?.height ?? window.innerHeight ?? document.documentElement.clientHeight ?? Application.MOBILE_BASE_VIEWPORT.height);
+        let width = Math.floor(viewport?.width ?? window.innerWidth ?? document.documentElement.clientWidth ?? Application.MOBILE_BASE_VIEWPORT.width);
+        let height = Math.floor(viewport?.height ?? window.innerHeight ?? document.documentElement.clientHeight ?? Application.MOBILE_BASE_VIEWPORT.height);
+        // The root element is centred inside <body>, whose safe-area padding
+        // shrinks the box it actually gets. Scaling to the full visual viewport
+        // therefore made the root taller than its container and, because the
+        // transform is about the centre, the overflow split evenly and clipped
+        // both ends — measured on iPad: 12.4px cut off the top of the menus with
+        // a matching dead strip below. Fit to the content box instead.
+        const bodyStyle = document.body && window.getComputedStyle?.(document.body);
+        if (bodyStyle) {
+            const pad = (value: string) => {
+                const n = Number.parseFloat(value);
+                return Number.isFinite(n) ? n : 0;
+            };
+            width -= pad(bodyStyle.paddingLeft) + pad(bodyStyle.paddingRight);
+            height -= pad(bodyStyle.paddingTop) + pad(bodyStyle.paddingBottom);
+        }
         return {
-            width: Math.max(1, width),
-            height: Math.max(1, height),
+            width: Math.max(1, Math.floor(width)),
+            height: Math.max(1, Math.floor(height)),
         };
     }
     private normalizeViewportDimension(value: number, minimum: number): number {

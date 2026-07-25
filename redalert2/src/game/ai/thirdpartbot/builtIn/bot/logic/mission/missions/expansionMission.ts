@@ -308,6 +308,20 @@ export class PackConyardMission extends Mission {
 const CONYARD_PACK_COOLDOWN = 15 * 60 * 6; // 6 mins
 const DO_NOT_EXPAND_BEFORE_TICKS = 15 * 60 * 6; // 6 minutes
 
+/**
+ * Unit-request priority for expansion. Deliberately below Harvester's 15 (the
+ * highest weight in the vehicle pool) so economy always outbids expansion.
+ *
+ * This used to be 100 — roughly 7x the top of the scale the production side
+ * actually works on — which meant an expansion mission owned the war factory
+ * outright for as long as it lived, and the bot bought MCV after MCV instead of
+ * miners or tanks. That is both the "they keep making lots of MCVs" symptom and
+ * a large part of why attacks never materialised.
+ */
+const EXPANSION_UNIT_PRIORITY = 12;
+/** Beyond this, another construction yard is worth less than what it costs. */
+const SOFT_CONYARD_LIMIT = 2;
+
 export class ExpansionMissionFactory {
     constructor(private lastConyardPackAt = Number.MIN_VALUE) {}
     getName(): string {
@@ -324,15 +338,35 @@ export class ExpansionMissionFactory {
         if (game.getCurrentTick() < DO_NOT_EXPAND_BEFORE_TICKS) {
             mcvs.forEach((mcv) => {
                 missionController.addMission(
-                    new ExpansionMission("initial-deploy-mcv-" + mcv, 100, mcv, [playerData.startLocation], logger),
+                    new ExpansionMission(
+                        "initial-deploy-mcv-" + mcv,
+                        EXPANSION_UNIT_PRIORITY,
+                        mcv,
+                        [playerData.startLocation],
+                        logger,
+                    ),
                 );
             });
         } else if (expandToCandidates.length > 0) {
-            mcvs.forEach((mcv) => {
-                missionController.addMission(
-                    new ExpansionMission("expansion-mcv-" + mcv, 100, mcv, expandToCandidates, logger),
-                );
-            });
+            // Expanding is only worth 3000 credits and a war-factory slot if the
+            // base it would support can actually be fed. Bots were reaching three
+            // construction yards while still on a single refinery.
+            const conyards = game.getVisibleUnits(player.name, "self", (r) => r.constructionYard).length;
+            const refineries = game.getVisibleUnits(player.name, "self", (r) => r.refinery).length;
+            const canAffordToExpand = conyards < SOFT_CONYARD_LIMIT && refineries >= 2;
+            if (canAffordToExpand) {
+                mcvs.forEach((mcv) => {
+                    missionController.addMission(
+                        new ExpansionMission(
+                            "expansion-mcv-" + mcv,
+                            EXPANSION_UNIT_PRIORITY,
+                            mcv,
+                            expandToCandidates,
+                            logger,
+                        ),
+                    );
+                });
+            }
         }
 
         const threatCache = matchAwareness.getThreatCache();

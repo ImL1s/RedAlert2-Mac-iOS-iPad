@@ -73,6 +73,16 @@ export class ResourceCollectionBuilding extends BasicBuilding {
             .filter((unitIds) => unitIds.some((unitId) => getCachedTechnoRules(game, unitId)?.refinery));
         const conyardsWithoutRefineries = conyardBoxes.length - conyardsWithRefineries.length;
 
-        return Math.max(1, Math.min(REFINERY_HARD_LIMIT, 2 * harvesters * (conyardsWithoutRefineries + 1)));
+        // Retail causality: a refinery SPAWNS a free miner, so refineries lead
+        // and harvesters follow. Deriving the cap from harvesters inverted that
+        // — at 0 harvesters the cap evaluated to max(1, 0) = ONE refinery, so a
+        // bot that had not yet received a miner (or had lost one) could never
+        // build its way out. Allow a solid economic base up front, then let
+        // harvester count justify further expansion.
+        const BASE_REFINERIES = 3;
+        return Math.max(
+            BASE_REFINERIES,
+            Math.min(REFINERY_HARD_LIMIT, harvesters + 2 * conyardsWithoutRefineries),
+        );
     }
 }
