@@ -49,7 +49,7 @@ if [[ "$VARIANT" == "ra2" ]]; then
   export RA2_APP_NAME="${RA2_APP_NAME:-Red Alert 2}"
 else
   export RA2_BUNDLE_ID="${RA2_BUNDLE_ID:-com.ammaar.ra2web}"
-  export RA2_APP_NAME="${RA2_APP_NAME:-RA2 Yuri Dev}"
+  export RA2_APP_NAME="${RA2_APP_NAME:-Yuri's Revenge}"
 fi
 
 if [[ $SKIP_WEB -eq 0 ]]; then
