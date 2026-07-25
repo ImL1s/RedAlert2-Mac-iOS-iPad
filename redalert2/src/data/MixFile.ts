@@ -100,7 +100,7 @@ export class MixFile {
     }
     /**
      * Some retail entries only exist as name hashes (e.g. the Yuri sidebar
-     * palette in sidec02md.mix, whose original filename is unknown). This
+     * palette in sidec02md.mix, whose original filename is "radaryuri.pal" (hash 0x0B8D57C4)). This
      * opens them under a caller-chosen alias.
      */
     public containsHash(hash: number): boolean {

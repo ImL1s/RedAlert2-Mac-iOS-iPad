@@ -565,19 +565,27 @@ export class GameRes {
         }
     }
     private async initUiCssVariables(rootElement: HTMLElement): Promise<void> {
+        if (!Engine.vfs)
+            throw new Error("VFS not initialized for UI CSS Variables");
+        // YR repaints the dialog backdrop: expandmd01.mix ships the Brute art
+        // and localmd.mix a Yuri variant, both painted against dialogn.pal.
+        // RA2's dialog.pal exists only in local.mix and blows the YR art out
+        // into white/brown blotches. (getFileNameVariant is the wrong tool —
+        // YR GUI palettes use n/y suffixes and same-name overrides, not "md".)
+        const dialogPalette = Engine.vfs.fileExists("dialogn.pal") ? "dialogn.pal" : "dialog.pal";
         const imagesToConvert: [
             string,
             string?
         ][] = [
-            ["pudlgbgn.shp", "dialog.pal"],
+            ["pudlgbgn.shp", dialogPalette],
+            // mnbttn.shp has the same split but no n/y palette variant exists;
+            // the YR button renders correctly with RA2's mainbttn.pal.
             ["mnbttn.shp", "mainbttn.pal"],
             ["cue_i.pcx"],
             ["cce_i.pcx"],
             ["cce_il.pcx"],
             ["cce_ir.pcx"],
         ];
-        if (!Engine.vfs)
-            throw new Error("VFS not initialized for UI CSS Variables");
         const convertedImageBlobs = await this.convertImagesToPng(Engine.vfs, imagesToConvert);
         try {
             const menuLogoFile = Engine.vfs.openFile("menulogo.png");

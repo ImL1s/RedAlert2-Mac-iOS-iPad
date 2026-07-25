@@ -11,6 +11,9 @@ const countryIcons = new Map<string, string>()
     .set("Africans", "djbi.pcx")
     .set("Arabs", "arbi.pcx")
     .set("Alliance", "japi.pcx")
+    // YR only — ships in ra2md.mix::localmd.mix. Image.tsx skips a missing
+    // file gracefully, so RA2-only installs are unaffected.
+    .set("YuriCountry", "yrii.pcx")
     .set(RANDOM_COUNTRY_NAME, "rani.pcx")
     .set(OBS_COUNTRY_NAME, "obsi.pcx");
 interface CountryIconProps {
