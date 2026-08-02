@@ -5,7 +5,7 @@ iPad** — fully in English, with touch controls built for RTS (tap-select,
 drag-box, two-finger map grab, pinch zoom, long-press force-attack),
 mid-match save/load, retail-accurate lighting, and skirmish AI rebuilt from
 the ground up until no two matches play the same: per-match personalities ×
-strategic doctrines, the retail game's own 146 attack teams, superweapons
+strategic doctrines, the retail game's own 132 attack teams, superweapons
 fired like the original AI fired them, spies, garrisons, terror drones, and
 a different opponent every time you press Start.
 
