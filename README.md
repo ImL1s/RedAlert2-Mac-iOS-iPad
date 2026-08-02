@@ -32,7 +32,7 @@ underneath. **RA2 has no released engine source.** EA's February 2025 source
 drop covered Tiberian Dawn, Red Alert 1, Renegade, and Generals — RA2 is
 conspicuously absent. There is nothing to compile.
 
-What exists instead is a clean-room reconstruction: Chronodivide, reverse-built
+What exists instead is a from-scratch reimplementation: Chronodivide, rebuilt
 over years into a deterministic TypeScript sim + Three.js renderer, continued
 by the RA2WEB community. So the Generals playbook still applies — *preserve
 the battle-tested engine, swap the platform underneath it* — but the
@@ -271,6 +271,25 @@ cd redalert2 && RA2_HTTP=1 bun run dev
 | `scripts/prepare-gameres.ts` | The asset importer (what `setup.sh` runs for you) |
 | `scripts/build-ios.sh` | Web build → asset staging → xcodegen → xcodebuild |
 
+## What's upstream and what isn't
+
+The first commit vendored the upstream engine and early port work together, so
+git history alone won't separate them. Here is the split, measured:
+
+| | lines | whose |
+|---|---|---|
+| `redalert2/src/**` (engine) | ~127,300 | Chronodivide → RA2WEB → [huangkaoya/redalert2](https://github.com/huangkaoya/redalert2), vendored at `8c07f10` |
+| `redalert2/src/game/ai/thirdpartbot/**` | ~11,600 | [Supalosa's bot](https://github.com/Supalosa/supalosa-chronodivide-bot) (MIT), extended here by +4,223 |
+| `ios/**` (Swift shell) | 4,646 | this repo |
+| `scripts/**` (import, build, probes) | 2,534 | this repo |
+| `docs/`, `README` | 1,199 | this repo |
+
+Everything after the vendored import: 200 files, +13,006 / −1,117. Reproduce with
+`git diff --shortstat 3ebf6d1 HEAD`.
+
+The English translation is a diff across the engine tree rather than new files —
+9,690 string-table entries plus UI text and comments over ~1,300 source files.
+
 ## Lineage & credits
 
 This project stands on a chain of remarkable work, and this time we want to
@@ -278,7 +297,7 @@ name all of it:
 
 **The engine lineage**
 - **[Chronodivide](https://chronodivide.com)** by **Alexandru Ciucă** — the
-  clean-room RA2 engine reconstruction this all descends from: a
+  from-scratch RA2 engine reimplementation this all descends from: a
   deterministic, faithful RA2 simulation built in TypeScript over many
   years. Never open-sourced by its author; see the disclaimer below.
 - **[RA2WEB](https://www.ra2web.com)** and the Chinese RA2WEB community —
@@ -304,8 +323,8 @@ name all of it:
   (skirmish AI pacing and superweapon coordination). Releasing these was a
   gift to the community; this project mined them gratefully.
 - **The retail `aimd.ini`** — Westwood's own AI designers authored the 132
-  attack teams and 165 triggers our bots now field. The best AI content in
-  the game was in the game all along.
+  attack teams and 165 triggers our bots now field. Their designers wrote
+  those; the bot just had to use them.
 
 **The reference keepers**
 - **[ModEnc](https://modenc.renegadeprojects.com)** — the C&C modding
@@ -346,10 +365,12 @@ respective owners. Per the upstream project's terms: all rights, including
 profit rights, to the underlying engine reconstruction belong to the owner
 of Chronodivide/RA2WEB, and **any commercial use is strictly prohibited**.
 
-No retail game assets are distributed with this repository; a legally-owned
-copy of Red Alert 2 + Yuri's Revenge is required, and the import script
-only ever reads from *your* install. The repository inherits from its
-upstream base a small bootstrap configuration bundle (`redalert2/public/`)
-that the engine needs to reach its menus; if you are a rights holder and
-would like anything here changed or removed, open an issue and it will be
-handled immediately.
+No retail game assets are distributed with this repository. A legally-owned
+copy of Red Alert 2 + Yuri's Revenge is required, and the import script only
+ever reads from *your* install.
+
+One file is inherited from the upstream base: `redalert2/public/res/ra2cd.mix`,
+a 117 KB archive of 25 small members that the engine loads unconditionally at
+boot. Upstream's `ini.mix` bundle was removed here after verifying the local
+boot path never reads it. If you are a rights holder and would like anything
+here changed or removed, open an issue and it will be handled immediately.

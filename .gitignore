@@ -9,6 +9,10 @@ redalert2/public/general.csf
 redalert2/public/generalmd.csf
 # Chinese original, kept locally as a reference backup only.
 redalert2/public/general.zh-CN.csf
+# Upstream shipped this CDN-delivery bundle of retail INI data. Nothing in the
+# local/iOS boot path reads it (GameRes only loads it on the CDN branch), so it
+# is not distributed here. Verified by deleting it and playing a full match.
+redalert2/public/ini.mix
 
 # --- Dependencies ---
 node_modules/
