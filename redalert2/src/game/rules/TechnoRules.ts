@@ -270,7 +270,6 @@ export class TechnoRules extends ObjectRules {
     declare debrisTypes: string[];
     declare debrisAnims: string[];
     declare isLightpost: boolean;
-    declare invisibleInGame: boolean;
     declare lightVisibility: number;
     declare lightIntensity: number;
     declare lightRedTint: number;
@@ -608,7 +607,7 @@ export class TechnoRules extends ObjectRules {
         // means "never draw this building" — it exists only to cast light.
         // The old imageName === "GALITE" check also swallowed the VISIBLE
         // GALITE street lamp, hiding it incorrectly.
-        this.invisibleInGame = this.ini.getBool("InvisibleInGame");
+        // invisibleInGame is already read in the shared pass above; reuse it.
         this.isLightpost = this.invisibleInGame;
         this.lightVisibility = this.ini.getNumber("LightVisibility", 5000);
         this.lightIntensity = this.ini.getNumber("LightIntensity");

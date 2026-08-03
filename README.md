@@ -3,20 +3,18 @@
 **Red Alert 2 and Yuri's Revenge skirmish running natively on iPhone and
 iPad** — fully in English, with touch controls built for RTS (tap-select,
 drag-box, two-finger map grab, pinch zoom, long-press force-attack),
-mid-match save/load, retail-accurate lighting, and skirmish AI rebuilt from
-the ground up until no two matches play the same: per-match personalities ×
+mid-match save/load, retail-accurate lighting, and skirmish AI built out on top of Supalosa's
+Chrono Divide bot until you get a different opponent every match: per-match personalities ×
 strategic doctrines, the retail game's own 132 attack teams, superweapons
-fired like the original AI fired them, spies, garrisons, terror drones, and
-a different opponent every time you press Start.
+fired like the original AI fired them, spies, garrisons, terror drones, and a roster that shifts every game.
 
-No emulation, and no rewrite either: this is the real Chronodivide-lineage
-TypeScript engine — the most complete faithful RA2 engine in existence —
-kept battle-tested and unchanged where it counts, wrapped in a native Swift
-shell. Rendering flows WebGL → ANGLE → Metal via WebKit; your retail game
+No emulation, and no rewrite either: this is the real Chrono Divide-lineage
+TypeScript engine, with its core simulation loop and determinism model left
+alone and the changes additive, wrapped in a native Swift shell. Rendering flows WebGL → ANGLE → Metal via WebKit; your retail game
 assets ship inside the app bundle and never touch the network.
 
 **No game assets are included or distributed.** You need your own copy of
-Red Alert 2 + Yuri's Revenge ([Steam](https://store.steampowered.com/app/2229830/),
+Red Alert 2 + Yuri's Revenge ([Steam](https://store.steampowered.com/app/2229850/),
 part of the C&C Ultimate Collection). One script imports everything from
 your install:
 
@@ -27,12 +25,20 @@ your install:
 ## Why this port is shaped differently than Generals
 
 The sibling project ([Generals-Mac-iOS-iPad](https://github.com/ammaarreshi/Generals-Mac-iOS-iPad))
-ports EA's GPL-released C++ engine: real engine, ARM64 compile, DXVK→MoltenVK
-underneath. **RA2 has no released engine source.** EA's February 2025 source
-drop covered Tiberian Dawn, Red Alert 1, Renegade, and Generals — RA2 is
-conspicuously absent. There is nothing to compile.
+ports EA's released C++ engine: real engine, ARM64 compile, DXVK→MoltenVK
+underneath. **RA2 has no released engine source.** EA opened Tiberian Dawn and
+Red Alert 1 alongside the Remastered Collection in 2020, then in February 2025
+released the recovered originals plus Renegade and Generals — all under GPL v3
+*with EA's additional terms*, which is why GitHub classifies them as "Other"
+rather than plain GPL-3.0. No RA2 engine in either release. (EA has published
+the RA2/Tiberian Sun *mission editor* under GPL-3.0, which is not the same
+thing.) The engine source is widely believed lost, though that traces to
+community accounts rather than any statement from EA.
 
-What exists instead is a from-scratch reimplementation: Chronodivide, rebuilt
+So there is no engine source to compile. The other route — x86 emulation of the
+retail binary, the way CnCNet-under-Wine works — is a non-starter on iOS.
+
+What exists instead is a from-scratch reimplementation: Chrono Divide, rebuilt
 over years into a deterministic TypeScript sim + Three.js renderer, continued
 by the RA2WEB community. So the Generals playbook still applies — *preserve
 the battle-tested engine, swap the platform underneath it* — but the
@@ -40,7 +46,7 @@ translation layer is different:
 
 | Generals port | This port |
 |---|---|
-| Real 2003 C++ engine, untouched | Real Chronodivide-lineage TS engine, untouched where it counts |
+| Real 2003 C++ engine, untouched | Real Chrono Divide-lineage TS engine, untouched where it counts |
 | DX8 → DXVK → Vulkan → MoltenVK → Metal | WebGL → ANGLE → Metal (Apple ships this in WebKit, JIT included) |
 | Filesystem rerouted into the bundle | Assets bundled + first-launch seed into origin storage, self-healing |
 | SDL touch → RTS touch semantics | Custom gesture engine → the engine's pointer layer |
@@ -62,7 +68,7 @@ In rough chronological order:
   a translator credit); ~38 source files of UI/comments/dev-tools were
   translated by hand.
 - **A native shell with zero network dependency.** Custom URL-scheme handler
-  serving the built app and ~750MB of game assets from the bundle;
+  serving the built app and ~750MB of game assets from the bundle (the Yuri's Revenge build; RA2-classic is ~400MB);
   first-launch seeding into browser origin storage that verifies per-file and
   self-heals when iOS purges storage under disk pressure.
 - **Touch controls that feel like an RTS**, not a webpage: one-finger
@@ -83,10 +89,10 @@ In rough chronological order:
 The engine had YR scaffolding but booted RA2-only. Getting to a **fully
 playable third faction** took three phases: engine-mode plumbing and md-asset
 import; the slave-miner economy (the faction's core loop — slaves, grinder,
-bio reactor occupancy power); and the exotics — Mastermind mind-control
-capacity, Magnetron vehicle lifting, Tank Bunkers, Cloning Vats, Psychic
-Dominator and Genetic Mutator superweapons, Battle Fortress open-topped
-fire, Robot Tanks with a live control-center dependency, Boris airstrikes,
+bio reactor occupancy power); and the exotics — Mastermind mind-control capacity (retail's
+overload self-damage is not modelled), Magnetron vehicle lifting, Tank Bunkers, Cloning Vats, Psychic
+Dominator and Genetic Mutator superweapons, Battle Fortress open-topped fire (proxied as the strongest
+passenger's weapon at a scaled rate, not five passengers firing), Robot Tanks with a live control-center dependency, Boris airstrikes,
 berserk gas. Plus the YR-specific crash archaeology: the retail `rulesmd.ini`
 *omits* ~25 `[AudioVisual]` keys that the YR binary hardcodes — the first
 move order in any YR game was a fatal crash until the engine learned the
@@ -94,8 +100,9 @@ retail defaults.
 
 ### Making it look right
 A 26-agent audit compared every asset and lighting path against retail
-byte-for-byte: seeded archives identical to Steam, VXL parsing byte-equal to
-the CNCMaps reference, all four voxel normal tables exact. The audit also
+seeded archives byte-identical to Steam, VXL parsing byte-equal to the
+CNCMaps reference implementation (not to the retail binary, which nothing here
+was compared against), all four voxel normal tables exact. The audit also
 found real divergences, all fixed: map `[Lighting]` ground term applied with
 the wrong sign, palette lighting multiplied in the wrong color domain (now
 exact gamma-domain math in the shaders), voxel shading rebuilt to the retail
@@ -205,17 +212,17 @@ batches were drawing all 10,000 preallocated slots every frame at 2.4%
 occupancy, the shadow map covered 233 tiles for a 31-tile view, every sprite
 atlas was RGBA8 carrying a single payload byte, and the palette shader ran
 nine `pow()` per fragment computing the identity function. Fixing those took
-two of those terms from 2.81 GB/s to 0.25 GB/s with the image unchanged (the
-shadows are *sharper*: a fitted box has 3.7× finer texels even at a quarter
-the map size). The shell now also reports `ProcessInfo.thermalState` to the
+the two biggest buffer terms about 5.7x lower, with shadows that are sharper rather than degraded (the shadows are *sharper*: refitting the box from a fixed 233-tile square to
+the visible rect plus a caster margin gives ~2.4x finer texels even at a
+quarter the map size). The shell now also reports `ProcessInfo.thermalState` to the
 page, so the renderer — never the simulation — throttles itself when iOS says
 the device is under thermal stress.
 
 **→ The complete engineering log: [docs/PORTING_PLAYBOOK.md](docs/PORTING_PLAYBOOK.md)**
 
 Like the Generals port, this is a **human + AI collaboration**: the
-engineering was done by [Claude Code](https://claude.com/claude-code)
-(Anthropic's Claude, Fable model), directed and playtested by a human who
+engineering was done with AI — see [AI-USE.md](AI-USE.md) for which model did
+what — directed and playtested by a human who
 described symptoms like *"tapping the MCV won't detect the touch"* and *"one
 of the Yuri AIs just made like 20 bio reactors"* and owned every decision.
 
@@ -273,22 +280,64 @@ cd redalert2 && RA2_HTTP=1 bun run dev
 
 ## What's upstream and what isn't
 
-The first commit vendored the upstream engine and early port work together, so
-git history alone won't separate them. Here is the split, measured:
+This repo's history starts from the vendored engine, so the split is verifiable
+against upstream directly:
+
+```sh
+git clone https://github.com/huangkaoya/redalert2 /tmp/upstream
+git -C /tmp/upstream checkout 8c07f10
+diff -rq /tmp/upstream/src redalert2/src | wc -l
+```
 
 | | lines | whose |
 |---|---|---|
-| `redalert2/src/**` (engine) | ~127,300 | Chronodivide → RA2WEB → [huangkaoya/redalert2](https://github.com/huangkaoya/redalert2), vendored at `8c07f10` |
-| `redalert2/src/game/ai/thirdpartbot/**` | ~11,600 | [Supalosa's bot](https://github.com/Supalosa/supalosa-chronodivide-bot) (MIT), extended here by +4,223 |
-| `ios/**` (Swift shell) | 4,646 | this repo |
-| `scripts/**` (import, build, probes) | 2,534 | this repo |
-| `docs/`, `README` | 1,199 | this repo |
+| `redalert2/**` (engine, 1,300 files) | ~127,000 | Chrono Divide → RA2WEB → [huangkaoya/redalert2](https://github.com/huangkaoya/redalert2) @ `8c07f10` |
+| `redalert2/src/game/ai/thirdpartbot/**` | 7,367 upstream + ~4,400 here | [Supalosa's bot](https://github.com/Supalosa/supalosa-chronodivide-bot) — **no licence declared**, see Licence |
+| `ios/**` (Swift shell) | 444 lines of Swift | this repo |
+| `scripts/**` (import, build, probes) | ~2,600 | this repo |
 
-Everything after the vendored import: 200 files, +13,006 / −1,117. Reproduce with
-`git diff --shortstat 3ebf6d1 HEAD`.
+Most of the port work is not in those two directories. Roughly 9,800 of the
+insertions land *inside* `redalert2/**` — Yuri's Revenge, the lighting fixes,
+touch controls and the AI all modify the engine tree rather than sitting beside
+it. The row above assigns that tree to upstream because upstream wrote the
+127,000 lines it started from, not because nothing was added to it.
+| `docs/`, `README` | ~1,200 | this repo |
 
-The English translation is a diff across the engine tree rather than new files —
-9,690 string-table entries plus UI text and comments over ~1,300 source files.
+On the English: the in-game strings are not translated by anyone here — they
+are extracted verbatim from the retail English `language.mix` by
+`scripts/prepare-gameres.ts`, i.e. Westwood's own text. The translation work in
+this repo is the source tree: ~680 lines of Chinese across 35 files, plus the
+UI plumbing to select the English tables.
+
+See [AI-USE.md](AI-USE.md) for which AI models were used and on what.
+
+## Licence
+
+GPL-3.0, inherited from the upstream engine. The full text is in `LICENSE`.
+
+The chain has a weak link and it is better to state it than to be told it.
+Upstream `huangkaoya/redalert2` ships GPL-3.0, but its own README says all rights
+belong to Chrono Divide's author, who has never open-sourced the engine. A
+licensor who says the rights are someone else's cannot make a GPL grant stick,
+so treat that grant as unverified rather than settled. This repository exists at
+Alexandru Ciucă's sufferance and comes down the day he asks.
+
+Two related gaps, stated rather than buried:
+
+- The skirmish AI derives from **Supalosa's Chrono Divide bot**, which declares
+  no licence at all (`"license": "UNLICENSED"` in both package manifests, no
+  LICENSE file). His README invites forks, but that is not a grant. Used here
+  pending an explicit licence from him.
+- Vendored third-party components and their notices are listed in
+  [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+
+**No built binary is distributed here, and none will be.** GPL-3.0 §6's
+Installation Information requirement cannot be satisfied under iOS code signing,
+so this ships as source you build with your own signing identity.
+
+Per EA's [C&C modding guidelines](https://www.ea.com/games/command-and-conquer/command-and-conquer-remastered/news/modding-faq),
+this project is free, non-commercial, and carries their required notice:
+*EA has not endorsed and does not support this product.*
 
 ## Lineage & credits
 
@@ -296,18 +345,20 @@ This project stands on a chain of remarkable work, and this time we want to
 name all of it:
 
 **The engine lineage**
-- **[Chronodivide](https://chronodivide.com)** by **Alexandru Ciucă** — the
+- **[Chrono Divide](https://chronodivide.com)** by **Alexandru Ciucă** — the
   from-scratch RA2 engine reimplementation this all descends from: a
   deterministic, faithful RA2 simulation built in TypeScript over many
   years. Never open-sourced by its author; see the disclaimer below.
-- **[RA2WEB](https://www.ra2web.com)** and the Chinese RA2WEB community —
-  the continuation that kept the engine alive and growing.
+- **[RA2WEB](https://www.ra2web.com)** — the authorised Chinese-language
+  operation of the official client, which contributed the Chinese translation
+  and a mobile control panel back upstream. Not a fork: Chrono Divide has been
+  under continuous development by its author throughout.
 - **[huangkaoya/redalert2](https://github.com/huangkaoya/redalert2)** — the
   React + Three.js refactor this repo builds on directly.
 
 **The AI's teachers**
-- **[Supalosa's Chronodivide bot](https://github.com/Supalosa/supalosa-chronodivide-bot)**
-  (MIT) — the foundation of the skirmish AI: missions, squads, threat maps,
+- **[Supalosa's Chrono Divide bot](https://github.com/Supalosa/supalosa-chronodivide-bot)**
+  (**no licence declared** — see Licence) — the foundation of the skirmish AI: missions, squads, threat maps,
   and the scaffolding everything else was built into. Several fixes from its
   newer branches (force-attack on disguised units, ammo gating, action
   cooldowns) were ported back in.
@@ -346,7 +397,8 @@ name all of it:
   [js-logger](https://github.com/jonnyreeves/js-logger), and
   [7-Zip](https://www.7-zip.org) (the WASM build powers in-browser archive
   import).
-- [Claude Code](https://claude.com/claude-code) — the AI pair that did the
+- [Claude Code](https://claude.com/claude-code), Gemini and GPT — see
+  [AI-USE.md](AI-USE.md) for the split. Claude Code did the
   engineering.
 
 **The originators**
@@ -361,9 +413,10 @@ issue — credit will be added, gladly.
 
 This is a non-profit fan project, not affiliated with Electronic Arts Inc.
 No copyright infringement is intended; all rights are held by their
-respective owners. Per the upstream project's terms: all rights, including
-profit rights, to the underlying engine reconstruction belong to the owner
-of Chronodivide/RA2WEB, and **any commercial use is strictly prohibited**.
+respective owners. The engine this builds on is published under GPL-3.0 (see
+Licence above), while the Chrono Divide/RA2WEB lineage it descends from states
+that its engine reconstruction remains the author's and that commercial use is
+prohibited. This project is non-commercial and takes no position between them.
 
 No retail game assets are distributed with this repository. A legally-owned
 copy of Red Alert 2 + Yuri's Revenge is required, and the import script only

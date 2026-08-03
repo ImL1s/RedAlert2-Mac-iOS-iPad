@@ -47,7 +47,7 @@ ignores the silent switch. `mediaTypesRequiringUserActionForPlayback = []` so
 audio and the menu video can autoplay. The WebView is marked `isInspectable` in
 debug builds so Safari's Web Inspector can attach to a running device.
 
-## 3. Getting 376MB of assets onto the device
+## 3. Getting ~750MB of assets onto the device
 
 The engine normally imports assets in-browser: the user points it at their game
 files, and it splits/transcodes MIX archives into origin-private storage (OPFS).
@@ -156,9 +156,9 @@ period. No cheating. Easy reacts slowly, sends small waves, and leaves you six
 minutes to breathe; Brutal is 600 APM with larger armies and half the cooldown.
 
 **Per-match personality.** On top of difficulty, each game rolls one of four
-personalities — rusher, balanced, boomer, sieger — that further scale pacing and,
+personalities — rusher, harasser, balanced, boomer, turtle, opportunist — that further scale pacing and,
 crucially, *weight the unit compositions* (a rusher favours cheap infantry
-spam; a boomer stacks Apocalypse tanks and Kirovs; a sieger builds artillery
+spam; a boomer stacks Apocalypse tanks and Kirovs; a turtle builds artillery
 pushes). The roll uses the game's own deterministic PRNG, never `Math.random`,
 so bots stay in lockstep for future LAN play. Same difficulty setting produces a
 different opponent every match.
@@ -485,7 +485,7 @@ answer was one file, not forty.
 
 ## 9. Retail-accurate lighting (the audit that ended the guesswork)
 
-A 26-agent audit compared the pipeline against retail byte-for-byte. The
+A 26-agent audit compared the pipeline against retail and against the CNCMaps reference. The
 provenance side came back clean (seeded archives identical to Steam, VXL
 parsing byte-equal to the CNCMaps reference implementation, all four voxel
 normal tables exact). The lighting side did not — and every divergence was a
@@ -613,7 +613,7 @@ naming, because they share one shape: **silent behavioural death**.
    nothing" reports.
 
 **The lesson:** a bot that does nothing throws nothing. Error-free soak
-tests and per-tick profiling both passed while two thirds of the AI was
+tests and per-tick profiling both passed while large parts of the AI were
 inert. Liveness has to be asserted explicitly, so it now is:
 `scripts/ai-liveness-probe.js` runs a mixed-difficulty match headlessly and
 fails if any bot stops building varied structures, stops forming attack
@@ -706,7 +706,10 @@ waves launch with bounded gaps, the base grows and stays varied, no structure
 exceeds its cap, queue cancels stay inside a budget, and per-bot cost stays
 under the device budget. All three chapter-13 regressions fail it.
 `scripts/build-ios.sh` refuses `--device` unless the run is signed off with
-`RA2_LIVENESS_OK=1`.
+`RA2_LIVENESS_OK=1`. Be clear about what that is: the probe is pasted into the
+dev console of a running skirmish and needs a real WebGL context, so it cannot
+run in CI or in the build script. The env var is an honour-system gate that you
+set by hand after watching it pass, not an automated check.
 
 **Then actually watch.** Counters cannot tell you that a base looks wrong.
 The routine, all through the debug REPL in the desktop lab:
