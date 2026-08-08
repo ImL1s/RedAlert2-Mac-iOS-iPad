@@ -1,5 +1,8 @@
 # Command & Conquer Red Alert 2 + Yuri's Revenge — iPhone & iPad
 
+<img width="800" height="450" alt="0808" src="https://github.com/user-attachments/assets/c8efcdb7-72c4-47b8-86a7-cecd25eb4ace" />
+
+
 **Red Alert 2 and Yuri's Revenge skirmish running natively on iPhone and
 iPad** — fully in English, with touch controls built for RTS (tap-select,
 drag-box, two-finger map grab, pinch zoom, long-press force-attack),
