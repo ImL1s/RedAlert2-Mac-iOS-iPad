@@ -82,7 +82,7 @@ preserve commit history.
 | **Min SDK** | API Level 29 (Android 10) — aligned with Epic #1 contract |
 | **Target SDK** | API Level 35 (Android 15) |
 | **Architectures** | `arm64-v8a` (primary), `x86_64` (emulator) |
-| **WebView** | Android System WebView / Chrome 100+ with WebGL 2.0 & OPFS |
+| **WebView** | Android System WebView with WebGL 2.0, OPFS, and document-start script support (see FC-6). Providers lacking required features fail closed. |
 | **Form Factors** | Phones, Tablets, Foldables (display cutout adaptive) |
 | **Input** | Touch (RTS tap/box/drag/pinch); Bluetooth/USB peripherals (future — #24) |
 
@@ -270,9 +270,11 @@ Violations block release.
   `redalert2/public/` (for Vite dev) and `gameres-export/` (canonical). Both
   paths contain retail-derived assets and must not enter Git or public builds.
 - **Document-start API availability**: `WebViewCompat.addDocumentStartJavaScript`
-  requires `WebView` ≥ 111 and `AndroidX WebKit` ≥ 1.9.0. Verify availability
-  on the minimum supported device matrix. If unavailable, the error state path
-  described in FC-6 applies.
+  requires `AndroidX WebKit` ≥ 1.9.0 and a runtime WebView provider that reports
+  `DOCUMENT_START_SCRIPT` as supported. Verify availability on the minimum
+  supported device matrix during issue #5 implementation. Providers that do not
+  report this feature fall into the FC-6 error state path. No minimum Chrome/
+  WebView version number is stated here — the contract is feature-based.
 
 ---
 
