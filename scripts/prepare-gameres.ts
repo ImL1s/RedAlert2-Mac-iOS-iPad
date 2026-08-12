@@ -111,6 +111,9 @@ for (const name of ["ra2.mix", "language.mix", "multi.mix"]) {
 console.log("== Extracting English strings -> gameres-export/general.csf");
 const langMix = openMix(retailFile("language.mix"));
 extractTo(langMix, "ra2.csf", join(OUT, "general.csf"));
+// Also copy to redalert2/public/ for Vite dev server (Application.loadTranslations
+// fetches /general.csf). These files are gitignored and never committed.
+copyFileSync(join(OUT, "general.csf"), join(ROOT, "redalert2", "public", "general.csf"));
 
 console.log("== Converting music (theme.mix -> music/*.mp3)");
 const themeMix = openMix(retailFile("theme.mix"));
@@ -178,6 +181,8 @@ console.log("== Extracting YR strings -> gameres-export/generalmd.csf");
 try {
     const langmdMix = openMix(retailFile("langmd.mix"));
     extractTo(langmdMix, "ra2md.csf", join(OUT, "generalmd.csf"));
+    // Also copy to redalert2/public/ for Vite dev server (gitignored).
+    copyFileSync(join(OUT, "generalmd.csf"), join(ROOT, "redalert2", "public", "generalmd.csf"));
 } catch {
     console.warn("   (skip) langmd.mix/ra2md.csf not found");
 }
