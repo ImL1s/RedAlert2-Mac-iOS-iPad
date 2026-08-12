@@ -862,7 +862,7 @@ iOS shell:
 | Concern | iOS | Android (planned) |
 |---|---|---|
 | WebView | `WKWebView` (WebKit, JIT) | Android `WebView` (Chromium, V8) |
-| Asset origin | Custom URL scheme | `https://appassets.androidlocal/` via `WebViewAssetLoader` |
+| Asset origin | Custom URL scheme | `https://appassets.androidplatform.net/` via `WebViewAssetLoader` |
 | Storage | OPFS (native adapter) | OPFS (Chromium) + SAF for resource pack selection |
 | Lifecycle | `UIApplication` delegate | `Activity` lifecycle + `OnBackPressedDispatcher` |
 
