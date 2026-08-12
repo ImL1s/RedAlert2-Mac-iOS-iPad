@@ -11,7 +11,7 @@ import { ChecksumError } from './importError/ChecksumError';
 import { FileNotFoundError as GameResFileNotFoundError } from './importError/FileNotFoundError';
 import { NoStorageError } from './importError/NoStorageError';
 import { Crc32 } from '../../data/Crc32';
-import { isNativeShell } from '../../shell/iosSeed';
+import { isNativeShell } from '../../shell/nativeBridge';
 import { Palette } from '../../data/Palette';
 import { ShpFile } from '../../data/ShpFile';
 import { PcxFile } from '../../data/PcxFile';
@@ -517,10 +517,14 @@ export class GameRes {
         }
     }
     private async loadCustomMix(vfs: VirtualFileSystem): Promise<void> {
-        const resourceLoader = new ResourceLoader(this.appResPath);
-        const mixDataBuffer = await resourceLoader.loadBinary(`ra2cd.mix?v=${this.appVersion}`);
-        const mixFile = new MixFile(new DataStream(mixDataBuffer));
-        vfs.addArchive(mixFile, "ra2cd.mix");
+        try {
+            const resourceLoader = new ResourceLoader(this.appResPath);
+            const mixDataBuffer = await resourceLoader.loadBinary(`ra2cd.mix?v=${this.appVersion}`);
+            const mixFile = new MixFile(new DataStream(mixDataBuffer));
+            vfs.addArchive(mixFile, "ra2cd.mix");
+        } catch (e) {
+            console.warn("Custom asset ra2cd.mix not present in public assets, skipping:", e);
+        }
     }
     private async loadMixes(config: GameResConfig, cdnLoader: CdnResourceLoader | undefined, vfs: VirtualFileSystem, onProgress: LoadProgressCallback): Promise<void> {
         if (config.isCdn() && cdnLoader) {

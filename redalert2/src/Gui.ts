@@ -1,5 +1,5 @@
 import { Renderer } from './engine/gfx/Renderer.js';
-import { isNativeShell } from './shell/iosSeed.js';
+import { isNativeShell } from './shell/nativeBridge.js';
 import { UiScene } from './gui/UiScene.js';
 import { JsxRenderer } from './gui/jsx/JsxRenderer.js';
 import { BoxedVar } from './util/BoxedVar.js';
@@ -21,6 +21,7 @@ import { UiAnimationLoop } from './engine/UiAnimationLoop.js';
 import { Mixer } from './engine/sound/Mixer.js';
 import { ChannelType } from './engine/sound/ChannelType.js';
 import { AudioSystem } from './engine/sound/AudioSystem.js';
+import { registerActiveAudioSystem } from './shell/nativeLifecycleBridge';
 import { Sound } from './engine/sound/Sound.js';
 import { SoundSpecs } from './engine/sound/SoundSpecs.js';
 import { Music } from './engine/sound/Music.js';
@@ -498,6 +499,7 @@ export class Gui {
             }
             this.mixer = mixer;
             this.audioSystem = new AudioSystem(mixer as any);
+            registerActiveAudioSystem(this.audioSystem);
             const debugRoot = ((window as any).__ra2debug ??= {});
             debugRoot.audioSystem = this.audioSystem;
             debugRoot.mixer = this.mixer;

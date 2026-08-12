@@ -1,16 +1,17 @@
 import { BoxedVar } from '../util/BoxedVar';
+import type { ThermalState } from '../shell/nativeBridge';
 
-export type ThermalState = 'nominal' | 'fair' | 'serious' | 'critical' | 'unknown';
+export type { ThermalState };
 
 /**
  * OS-reported thermal pressure, pushed in by the native shell
- * (ios/Sources/GameViewController.swift). Nothing in the browser can observe
+ * (iOS/Android). Nothing in the browser can observe
  * this: JavaScript timing cannot tell SoC throttling apart from a heavy frame,
  * so without the shell the game has no way to know it is cooking the device.
  */
 export const thermalState = new BoxedVar<ThermalState>('nominal');
 
-/** Set when iOS Low Power Mode is on. Treated the same as thermal pressure. */
+/** Set when iOS/Android Low Power Mode is on. Treated the same as thermal pressure. */
 export const lowPowerMode = new BoxedVar<boolean>(false);
 
 /**
@@ -36,11 +37,14 @@ export function powerFrameCap(): number {
  * shell never calls it and the caps above stay inert.
  */
 export function installPowerStateReceiver(): void {
-    const shell = (window as any).__RA2_SHELL__;
+    const shell = window.__RA2_SHELL__;
     if (shell?.thermalState) {
         thermalState.value = shell.thermalState;
     }
-    (window as any).__RA2_POWER__ = (state: { thermal?: ThermalState; lowPower?: boolean }) => {
+    if (shell?.lowPowerMode !== undefined) {
+        lowPowerMode.value = shell.lowPowerMode;
+    }
+    window.__RA2_POWER__ = (state: { thermal?: ThermalState; lowPower?: boolean }) => {
         if (state?.thermal) {
             thermalState.value = state.thermal;
         }

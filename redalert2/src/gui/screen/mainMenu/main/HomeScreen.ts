@@ -6,7 +6,7 @@ import { MusicType } from '../../../../engine/sound/Music';
 import { MessageBoxApi } from '../../../component/MessageBoxApi';
 import { FullScreen } from '../../../FullScreen';
 import { getHumanReadableKey } from '@/gui/screen/options/component/getHumanReadableKey';
-import { isNativeShell } from '@/shell/iosSeed';
+import { isNativeShell } from '@/shell/nativeBridge';
 interface SidebarButton {
     label: string;
     tooltip?: string;

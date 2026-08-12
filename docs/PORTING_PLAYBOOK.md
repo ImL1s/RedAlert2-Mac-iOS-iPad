@@ -836,12 +836,77 @@ same debug REPL. It is where those branches were actually confirmed to fire.
 
 ---
 
-## Appendix: reproducing an asset build
+## Appendix A: Legal, License & Provenance Disclosures
 
+- **GNU General Public License v3.0**: This project is licensed under the GNU General Public License v3.0 (`GPL-3.0`).
+- **Non-Commercial Fan Project Disclaimer**: *RedAlert2-Mac-iOS-iPad is an open-source, non-commercial community project unaffiliated with Electronic Arts Inc. EA has not endorsed and does not support this product.*
+- **Trademark Notice**: Command & Conquer, Red Alert, and Yuri's Revenge are registered trademarks of Electronic Arts Inc. All product names, trademarks, and registered trademarks are property of their respective owners.
+- **Upstream & Lineage Provenance**:
+  - `redalert2/`: Web game engine vendored from `huangkaoya/redalert2` (`8c07f10`), descending from Chrono Divide (`Alexandru Ciucă`) via RA2WEB (`www.ra2web.com`).
+  - `redalert2/src/game/ai/thirdpartbot/`: Derived from Supalosa's Chrono Divide bot (`UNLICENSED`).
+  - `7zz.wasm`: LGPL-2.1-or-later (Igor Pavlov).
+  - Fonts: SIL Open Font License 1.1 (Fira Sans Condensed).
+- **Release Boundary Invariant**: The open-source repository and `publicCi` builds contain ZERO retail game assets, zero `.mix` archives, and zero retail string tables. All game assets are provided at runtime by the user via desktop pack generation or Storage Access Framework (SAF) onboarding.
+
+---
+
+## Appendix B: Android Developer Workflows & Troubleshooting
+
+### 1. Environment Setup & Prerequisites
+- **JDK**: Java Development Kit 21 (Temurin JDK 21 recommended).
+- **Bun**: Bun JavaScript runtime v1.3.10+.
+- **Android SDK**: API Level 34 / 35 with Android Build Tools and Platform Tools (`adb`).
+- **Gradle**: Gradle 8.x (managed via `./gradlew` wrapper).
+
+### 2. Desktop Resource Pack Generation (`prepare-gameres.ts`)
+Users generate a Manifest v2 resource pack from their legally owned Red Alert 2 / Yuri's Revenge installation:
 ```sh
-./scripts/setup.sh "/path/to/your/ra2/install"   # deps + verify + import
-./scripts/build-ios.sh --device                  # needs RA2_TEAM_ID for signing
+bun run scripts/prepare-gameres.ts "/path/to/your/ra2/install" --out "./gameres-export"
+```
+This produces `manifest.json` containing SHA-256 integrity hashes and file size declarations alongside extracted assets.
+
+### 3. One-Command Android Build (`./scripts/build-android.sh` / Gradle)
+```sh
+# 1. Staging WebDist & compiling publicCi debug APK:
+./scripts/build-android.sh
+
+# Or directly via Gradle:
+(cd redalert2 && bun run build)
+rm -rf android/app/src/main/assets/WebDist
+mkdir -p android/app/src/main/assets
+cp -R redalert2/dist android/app/src/main/assets/WebDist
+(cd android && ./gradlew assemblePublicCiDebug)
 ```
 
-`prepare-gameres.ts` is the source of truth for what the app ships and how it's
-derived from retail files. Nothing it produces is committed to the repo.
+### 4. ADB Device Run & Resource Onboarding
+```sh
+# Install debug APK to connected device:
+adb install -r android/app/build/outputs/apk/publicCi/debug/app-publicCi-debug.apk
+
+# Push generated resource pack to device storage:
+adb push ./gameres-export /sdcard/RA2ResPack
+
+# Launch app and select /sdcard/RA2ResPack in the Storage Access Framework (SAF) tree picker.
+```
+
+### 5. Comprehensive Test Execution Matrix
+```sh
+# Tier 1 & 2 Bun Unit Tests:
+(cd redalert2 && bun test)
+
+# Tier 1-4 Playwright Headless E2E Tests:
+(cd redalert2 && bun run build && bun x playwright test --config e2e/playwright.config.ts)
+
+# Android Native JVM Unit Tests & Build Assembly:
+(cd android && ./gradlew test assemblePublicCiDebug)
+
+# Static Forbidden Asset & Security Scanner:
+./scripts/verify-no-retail-assets.sh
+```
+
+### 6. Troubleshooting Matrix
+- **SAF Permission Denial / Loss**: If SAF URI access is lost across reboot, launch the SAF picker in app settings to re-authorize the resource pack directory.
+- **Insufficient Storage Warning**: Preflight requires at least 750MB free storage plus a 20% safety margin before OPFS seeding.
+- **WebView Renderer Process Crash**: `WebViewHost.kt` catches `onRenderProcessGone` and auto-recovers with exponential backoff up to 3 times in a 5-minute window. If the crash count exceeds 3, an unrecoverable low-memory prompt is surfaced.
+- **Exporting Diagnostic Bundles**: In app settings or via bridge `generateDiagnosticBundle()`, users can generate a sanitized JSON/ZIP diagnostic support bundle scrubbing user paths (`[REDACTED_PATH]`) and tokens (`[REDACTED_TOKEN]`).
+

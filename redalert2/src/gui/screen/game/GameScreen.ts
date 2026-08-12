@@ -1,5 +1,6 @@
 import { powerFrameCap } from '@/engine/PowerState';
 import { RootScreen } from '@/gui/screen/RootScreen';
+import { registerActiveGameScreen } from '@/shell/nativeLifecycleBridge';
 import { CompositeDisposable } from '@/util/disposable/CompositeDisposable';
 import { MedianPing } from './MedianPing';
 import { ScreenType, MainMenuScreenType } from '@/gui/screen/ScreenType';
@@ -61,7 +62,7 @@ import { OrderType } from '@/game/order/OrderType';
 import { RadialTileFinder } from '@/game/map/tileFinder/RadialTileFinder';
 import { Coords } from '@/game/Coords';
 import { inGameViewportActive } from '@/gui/inGameViewport';
-import { isNativeShell } from '@/shell/iosSeed';
+import { isNativeShell } from '@/shell/nativeBridge';
 
 /** Compact on-screen crash detail for the native shell (no devtools on device). */
 function formatShellCrashDetail(error: any): string {
@@ -130,6 +131,8 @@ export class GameScreen extends RootScreen {
         return !this.isSinglePlayer && !this.isLanGame;
     }
     async onEnter(params: any): Promise<void> {
+        registerActiveGameScreen(this);
+        this.disposables.add(() => registerActiveGameScreen(undefined));
         this.gameEndHandled = false;
         inGameViewportActive.value = true;
         this.pointer.lock();
@@ -1486,5 +1489,21 @@ export class GameScreen extends RootScreen {
             pingsRecv: 0,
             pingsSent: 0
         };
+    }
+    isMenuOpen(): boolean {
+        return Boolean(this.menu?.getCurrentScreen());
+    }
+    openMenu(): void {
+        this.menu?.open();
+    }
+    closeMenu(): void {
+        this.menu?.close();
+    }
+    triggerBackgroundAutosave(): void {
+        if (this.game) {
+            this.saveGame(this.game).catch((error: any) => {
+                console.warn('[GameScreen] Background autosave skipped/failed', error);
+            });
+        }
     }
 }
