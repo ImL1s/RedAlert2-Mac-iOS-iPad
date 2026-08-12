@@ -156,8 +156,13 @@ Violations block release.
 - **FC-3: Strict Origin Isolation Gate**
   `WebView` settings: `allowFileAccess = false`, `allowContentAccess = false`.
   `shouldOverrideUrlLoading` must block all navigation outside
-  `https://appassets.androidlocal/`. `addJavascriptInterface` methods must
-  validate the calling origin before executing sensitive operations.
+  `https://appassets.androidlocal/`. For native bridge communication,
+  prefer `WebViewCompat.addWebMessageListener` with explicit allowed-origin
+  rules (scoped to `https://appassets.androidlocal`), which provides
+  origin-validated messaging. If `addJavascriptInterface` is used instead
+  (e.g., for synchronous return values), sensitive methods must guard
+  execution behind a `webView.url` origin check, and the navigation guard
+  must prevent untrusted frames from loading in the first place.
 
 - **FC-4: Memory-Bounded Streaming Gate**
   Asset streaming must not load whole files into RAM via `arrayBuffer()` for
