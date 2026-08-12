@@ -37,3 +37,14 @@ xcuserdata/
 .idea/
 certs/
 .claude/
+
+# --- Agent / AI orchestration artifacts ---
+.agents/
+ORIGINAL_REQUEST.md
+PROJECT.md
+TEST_INFRA.md
+TEST_READY.md
+
+# --- Test output ---
+test-results/
+redalert2/test-results/

@@ -845,3 +845,26 @@ same debug REPL. It is where those branches were actually confirmed to fire.
 
 `prepare-gameres.ts` is the source of truth for what the app ships and how it's
 derived from retail files. Nothing it produces is committed to the repo.
+
+---
+
+## Appendix: Android port
+
+The Android port is tracked under
+[Epic #1](https://github.com/ImL1s/RedAlert2-Mac-iOS-iPad/issues/1).
+Architecture decisions and system boundaries are documented in
+[ADR-001](adr/001-android-architecture.md) (status: **Proposed**).
+
+The port reuses the same TypeScript engine and Three.js renderer — the
+native shell changes, but the simulation does not. Key differences from the
+iOS shell:
+
+| Concern | iOS | Android (planned) |
+|---|---|---|
+| WebView | `WKWebView` (WebKit, JIT) | Android `WebView` (Chromium, V8) |
+| Asset origin | Custom URL scheme | `https://appassets.androidlocal/` via `WebViewAssetLoader` |
+| Storage | OPFS (native adapter) | OPFS (Chromium) + SAF for resource pack selection |
+| Lifecycle | `UIApplication` delegate | `Activity` lifecycle + `OnBackPressedDispatcher` |
+
+Nothing in this table has been implemented yet. See the ADR for the
+dependency graph and fail-closed invariants that gate each implementation PR.
