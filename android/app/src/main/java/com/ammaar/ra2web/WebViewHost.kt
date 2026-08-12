@@ -53,7 +53,7 @@ class WebViewHost @JvmOverloads constructor(
             .addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(context))
             .build()
 
-        webViewInstance.webViewClient = NavigationGuardWebViewClient(context, assetLoader)
+        webViewInstance.webViewClient = NavigationGuardWebViewClient(context, assetLoader, bridge)
 
         addView(webViewInstance)
         this.webView = webViewInstance

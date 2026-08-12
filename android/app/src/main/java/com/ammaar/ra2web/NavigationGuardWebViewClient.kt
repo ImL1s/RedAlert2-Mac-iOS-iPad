@@ -10,7 +10,8 @@ import com.ammaar.ra2web.security.UrlSecurityValidator
 
 open class NavigationGuardWebViewClient(
     private val context: Context,
-    private val assetLoader: WebViewAssetLoader
+    private val assetLoader: WebViewAssetLoader,
+    private val nativeBridge: com.ammaar.ra2web.bridge.NativeBridge? = null
 ) : WebViewClient() {
 
     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -40,6 +41,7 @@ open class NavigationGuardWebViewClient(
     override fun onPageFinished(view: WebView?, url: String?) {
         super.onPageFinished(view, url)
         if (UrlSecurityValidator.isAllowedUrl(url)) {
+            nativeBridge?.onTrustedPageLoaded(url)
             val script = """
                 if (!window.__RA2_SHELL__) {
                     window.__RA2_SHELL__ = {
