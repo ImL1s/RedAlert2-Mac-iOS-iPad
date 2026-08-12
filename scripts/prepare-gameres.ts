@@ -6,8 +6,8 @@
  *
  * Produces:
  *   gameres-export/            ra2.mix, language.mix, multi.mix, music/*.mp3,
- *                              ra2ts_l.webm (menu video), glsl.png (splash)
- *   redalert2/public/general.csf   English in-game strings (from language.mix)
+ *                              ra2ts_l.webm (menu video), glsl.png (splash),
+ *                              general.csf, generalmd.csf, manifest.json
  *
  * Requires ffmpeg on PATH (brew install ffmpeg) for music/video conversion.
  * No game assets are committed to this repo — this script exists so a fresh
@@ -17,6 +17,7 @@ import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { deflateSync } from "node:zlib";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { MixFile } from "../redalert2/src/data/MixFile";
 import { ShpFile } from "../redalert2/src/data/ShpFile";
 import { Palette } from "../redalert2/src/data/Palette";
@@ -24,6 +25,7 @@ import { IniFile } from "../redalert2/src/data/IniFile";
 import { VirtualFile } from "../redalert2/src/data/vfs/VirtualFile";
 import { ImageUtils } from "../redalert2/src/engine/gfx/ImageUtils";
 import { mixDatabase } from "../redalert2/src/engine/mixDatabase";
+import { validateManifestV2 } from "../redalert2/src/engine/gameRes/ManifestV2";
 
 const RETAIL = process.env.RA2_RETAIL_DIR ?? "";
 if (!RETAIL) {
@@ -106,9 +108,9 @@ for (const name of ["ra2.mix", "language.mix", "multi.mix"]) {
     console.log(`   ${name}`);
 }
 
-console.log("== Extracting English strings -> redalert2/public/general.csf");
+console.log("== Extracting English strings -> gameres-export/general.csf");
 const langMix = openMix(retailFile("language.mix"));
-extractTo(langMix, "ra2.csf", join(ROOT, "redalert2", "public", "general.csf"));
+extractTo(langMix, "ra2.csf", join(OUT, "general.csf"));
 
 console.log("== Converting music (theme.mix -> music/*.mp3)");
 const themeMix = openMix(retailFile("theme.mix"));
@@ -172,10 +174,10 @@ for (const entry of readdirSync(RETAIL)) {
     }
 }
 
-console.log("== Extracting YR strings -> redalert2/public/generalmd.csf");
+console.log("== Extracting YR strings -> gameres-export/generalmd.csf");
 try {
     const langmdMix = openMix(retailFile("langmd.mix"));
-    extractTo(langmdMix, "ra2md.csf", join(ROOT, "redalert2", "public", "generalmd.csf"));
+    extractTo(langmdMix, "ra2md.csf", join(OUT, "generalmd.csf"));
 } catch {
     console.warn("   (skip) langmd.mix/ra2md.csf not found");
 }
@@ -225,17 +227,25 @@ try {
 
 rmSync(TMP, { recursive: true, force: true });
 
-console.log("== Writing manifest.json");
-const manifestFiles: { path: string; size: number }[] = [];
+console.log("== Writing manifest.json (v2)");
+const manifestFiles: { path: string; size: number; sha256: string }[] = [];
 const walk = (dir: string, prefix: string) => {
     for (const name of readdirSync(dir).sort()) {
         if (name === ".DS_Store" || name === "manifest.json") continue;
         const full = join(dir, name);
         if (statSync(full).isDirectory()) walk(full, `${prefix}${name}/`);
-        else manifestFiles.push({ path: `${prefix}${name}`, size: statSync(full).size });
+        else {
+            const content = readFileSync(full);
+            const sha256 = createHash("sha256").update(content).digest("hex");
+            manifestFiles.push({ path: `${prefix}${name}`, size: content.length, sha256 });
+        }
     }
 };
 walk(OUT, "");
-writeFileSync(join(OUT, "manifest.json"), JSON.stringify({ files: manifestFiles }, null, 1));
+
+const manifestObj = { version: 2 as const, files: manifestFiles };
+validateManifestV2(manifestObj);
+writeFileSync(join(OUT, "manifest.json"), JSON.stringify(manifestObj, null, 1));
+console.log(`== Manifest v2 validated & written (${manifestFiles.length} files)`);
 
 console.log("== Done. Now run scripts/build-ios.sh to bundle everything.");
