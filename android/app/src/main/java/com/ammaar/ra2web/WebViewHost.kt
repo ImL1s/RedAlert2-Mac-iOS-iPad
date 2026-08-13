@@ -23,6 +23,8 @@ class WebViewHost @JvmOverloads constructor(
     private var webView: WebView? = null
     private var recoveryCount = 0
     private val maxRecoveryAttempts = 3
+    private var isResumed = false
+    private var pendingRecovery = false
 
     companion object {
         const val DOMAIN = "appassets.androidplatform.net"
@@ -106,16 +108,20 @@ class WebViewHost @JvmOverloads constructor(
 
     private fun handleRenderProcessGone(_deadView: WebView?): Boolean {
         webView?.let {
-            removeView(it)
+            (it.parent as? ViewGroup)?.removeView(it)
             it.destroy()
         }
         webView = null
 
-        if (recoveryCount < maxRecoveryAttempts) {
-            recoveryCount++
-            createAndAttachWebView()
+        if (isResumed) {
+            if (recoveryCount < maxRecoveryAttempts) {
+                recoveryCount++
+                createAndAttachWebView()
+            } else {
+                showErrorState("WebView renderer process crashed repeatedly. Execution halted.")
+            }
         } else {
-            showErrorState("WebView renderer process crashed repeatedly. Execution halted.")
+            pendingRecovery = true
         }
         return true
     }
@@ -132,15 +138,29 @@ class WebViewHost @JvmOverloads constructor(
     }
 
     fun onPause() {
+        isResumed = false
         webView?.onPause()
     }
 
     fun onResume() {
+        isResumed = true
         webView?.onResume()
+        if (pendingRecovery) {
+            pendingRecovery = false
+            if (recoveryCount < maxRecoveryAttempts) {
+                recoveryCount++
+                createAndAttachWebView()
+            } else {
+                showErrorState("WebView renderer process crashed repeatedly. Execution halted.")
+            }
+        }
     }
 
     fun onDestroy() {
-        webView?.destroy()
+        webView?.let {
+            (it.parent as? ViewGroup)?.removeView(it)
+            it.destroy()
+        }
         webView = null
     }
 }
