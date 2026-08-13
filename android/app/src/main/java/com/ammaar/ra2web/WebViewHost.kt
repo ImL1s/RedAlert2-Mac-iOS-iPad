@@ -17,9 +17,10 @@ class WebViewHost @JvmOverloads constructor(
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
     private var webView: WebView? = null
+    var onRenderProcessGoneCallback: ((Boolean) -> Unit)? = null
 
     companion object {
-        const val DOMAIN = "appassets.androidlocal"
+        const val DOMAIN = "appassets.androidplatform.net"
         const val BASE_URL = "https://$DOMAIN/WebDist/index.html"
     }
 
@@ -53,7 +54,17 @@ class WebViewHost @JvmOverloads constructor(
             .addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(context))
             .build()
 
-        webViewInstance.webViewClient = NavigationGuardWebViewClient(context, assetLoader)
+        val webViewClient = LocalContentWebViewClient(
+            context = context,
+            assetLoader = assetLoader,
+            onRenderProcessGoneListener = { didCrash ->
+                onDestroy()
+                onRenderProcessGoneCallback?.invoke(didCrash)
+                true
+            }
+        )
+
+        webViewInstance.webViewClient = webViewClient
 
         addView(webViewInstance)
         this.webView = webViewInstance

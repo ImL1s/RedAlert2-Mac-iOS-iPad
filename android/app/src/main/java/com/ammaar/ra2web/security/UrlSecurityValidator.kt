@@ -1,7 +1,7 @@
 package com.ammaar.ra2web.security
 
 object UrlSecurityValidator {
-    const val ALLOWED_DOMAIN = "appassets.androidlocal"
+    const val ALLOWED_DOMAIN = "appassets.androidplatform.net"
     const val ALLOWED_ORIGIN = "https://$ALLOWED_DOMAIN"
 
     fun isAllowedUrl(url: String?): Boolean {

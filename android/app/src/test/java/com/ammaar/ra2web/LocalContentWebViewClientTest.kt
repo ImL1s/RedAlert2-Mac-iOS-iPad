@@ -226,9 +226,55 @@ class LocalContentWebViewClientTest {
         }
     }
 
+    private fun createRequest(urlStr: String, httpMethod: String = "GET"): WebResourceRequest {
+        val testUri = android.net.TestUri(urlStr)
+        return object : WebResourceRequest {
+            override fun getUrl(): Uri = testUri
+            override fun isForMainFrame(): Boolean = true
+            override fun isRedirect(): Boolean = false
+            override fun hasGesture(): Boolean = false
+            override fun getMethod(): String = httpMethod
+            override fun getRequestHeaders(): Map<String, String> = emptyMap()
+        }
+    }
+
     @Test
     fun testShouldInterceptRequestNullHandling() {
         val response = client.shouldInterceptRequest(null, null as WebResourceRequest?)
-        assertNull(response)
+        assertNotNull(response)
+        assertEquals(403, response.statusCode)
+    }
+
+    @Test
+    fun testShouldInterceptRequestNonLocalDomainReturns403() {
+        val request = createRequest("https://evil.com/index.html")
+        val response = client.shouldInterceptRequest(null, request)
+        assertNotNull(response)
+        assertEquals(403, response.statusCode)
+    }
+
+    @Test
+    fun testShouldInterceptRequestNonHttpsSchemeReturns403() {
+        val request = createRequest("http://appassets.androidplatform.net/index.html")
+        val response = client.shouldInterceptRequest(null, request)
+        assertNotNull(response)
+        assertEquals(403, response.statusCode)
+    }
+
+    @Test
+    fun testShouldInterceptRequestUnhandledLocalRequestReturns404() {
+        val request = createRequest("https://appassets.androidplatform.net/unknown.png")
+        val response = client.shouldInterceptRequest(null, request)
+        assertNotNull(response)
+        assertEquals(404, response.statusCode)
+    }
+
+    @Test
+    fun testShouldInterceptRequestGameresSuccessReturns200() {
+        val request = createRequest("https://appassets.androidplatform.net/gameres/ra2.mix")
+        val response = client.shouldInterceptRequest(null, request)
+        assertNotNull(response)
+        assertEquals(200, response.statusCode)
+        assertEquals("application/octet-stream", response.mimeType)
     }
 }

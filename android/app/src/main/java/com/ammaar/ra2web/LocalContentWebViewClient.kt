@@ -9,6 +9,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
+import com.ammaar.ra2web.security.UrlSecurityValidator
 import java.io.BufferedInputStream
 import java.io.ByteArrayInputStream
 import java.io.File
@@ -22,14 +23,14 @@ open class LocalWebResourceResponse(
     private val status: Int,
     private val reason: String,
     private val headersMap: Map<String, String>,
-    private val dataStream: InputStream
+    private val dataStream: InputStream?
 ) : WebResourceResponse(mimeTypeStr, encodingStr, status, reason, headersMap, dataStream) {
     override fun getMimeType(): String = mimeTypeStr
     override fun getEncoding(): String = encodingStr
     override fun getStatusCode(): Int = status
     override fun getReasonPhrase(): String = reason
     override fun getResponseHeaders(): Map<String, String> = headersMap
-    override fun getData(): InputStream = dataStream
+    override fun getData(): InputStream? = dataStream
 }
 
 open class LocalContentWebViewClient @JvmOverloads constructor(
@@ -40,7 +41,7 @@ open class LocalContentWebViewClient @JvmOverloads constructor(
 ) : WebViewClient() {
 
     companion object {
-        const val DOMAIN = "appassets.androidlocal"
+        const val DOMAIN = "appassets.androidplatform.net"
         const val BUFFER_SIZE_BYTES = 64 * 1024 // 64KB chunked streaming buffer
 
         private val GAME_ASSET_EXTENSIONS = setOf(
@@ -48,16 +49,27 @@ open class LocalContentWebViewClient @JvmOverloads constructor(
         )
     }
 
+    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+        val url = request?.url?.toString()
+        return !UrlSecurityValidator.isAllowedUrl(url)
+    }
+
+    @Deprecated("For API < 24 compatibility")
+    override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean {
+        return !UrlSecurityValidator.isAllowedUrl(url)
+    }
+
     override fun shouldInterceptRequest(
         view: WebView?,
         request: WebResourceRequest?
-    ): WebResourceResponse? {
-        val url = request?.url ?: return null
+    ): WebResourceResponse {
+        val url = request?.url ?: return create403Response("Null request URL")
+        val scheme = url.scheme ?: ""
         val host = url.host ?: ""
 
-        // Only intercept requests for appassets.androidlocal
-        if (!host.equals(DOMAIN, ignoreCase = true)) {
-            return null
+        // Only intercept requests for appassets.androidplatform.net under HTTPS
+        if (!scheme.equals("https", ignoreCase = true) || !host.equals(DOMAIN, ignoreCase = true)) {
+            return create403Response("Non-local domain request blocked")
         }
 
         val method = request.method ?: "GET"
@@ -71,7 +83,12 @@ open class LocalContentWebViewClient @JvmOverloads constructor(
         }
 
         // Delegate static assets to WebViewAssetLoader if provided
-        return assetLoader?.shouldInterceptRequest(url)
+        val assetResponse = assetLoader?.shouldInterceptRequest(url)
+        if (assetResponse != null) {
+            return assetResponse
+        }
+
+        return create404Response()
     }
 
     fun handleGameResourceRequest(rawPath: String): WebResourceResponse {
@@ -79,7 +96,7 @@ open class LocalContentWebViewClient @JvmOverloads constructor(
 
         // 1. Multi-pass URL decode & path traversal security validation
         if (isPathTraversalAttempt(cleanPath)) {
-            return create403Response()
+            return create403Response("Path traversal attempt blocked")
         }
 
         val decodedPath = decodeMultiPass(cleanPath)
@@ -90,7 +107,7 @@ open class LocalContentWebViewClient @JvmOverloads constructor(
 
         // 2. File canonical path containment check
         if (!isCanonicalContained(targetFile, rootDir)) {
-            return create403Response()
+            return create403Response("Canonical path containment check failed")
         }
 
         val mimeType = getMimeType(relativePath)
@@ -233,7 +250,7 @@ open class LocalContentWebViewClient @JvmOverloads constructor(
         )
     }
 
-    private fun create403Response(): WebResourceResponse {
+    fun create403Response(reason: String = "Forbidden"): WebResourceResponse {
         val headers = mapOf(
             "Access-Control-Allow-Origin" to "*"
         )
@@ -241,13 +258,13 @@ open class LocalContentWebViewClient @JvmOverloads constructor(
             "text/plain",
             "UTF-8",
             403,
-            "Forbidden",
+            reason,
             headers,
-            ByteArrayInputStream("403 Forbidden: Path traversal attempt blocked".toByteArray(Charsets.UTF_8))
+            ByteArrayInputStream("403 Forbidden: $reason".toByteArray(Charsets.UTF_8))
         )
     }
 
-    private fun create404Response(): WebResourceResponse {
+    fun create404Response(): WebResourceResponse {
         val headers = mapOf(
             "Access-Control-Allow-Origin" to "*"
         )
