@@ -213,8 +213,16 @@ Violations block release.
     `https://appassets.androidplatform.net`. Returning `null` is prohibited
     because it allows WebView to fall back to network loading.
   * Service Worker requests are subject to the same deny policy.
-  * Redirect chains cannot bypass the allowlist (validate the final resolved
-    URL, not just the initial request).
+  * The game WebView must never use direct network fallback for appassets
+    requests or executable subresources. Every appassets request must return
+    verified local content or an explicit error response.
+    `shouldInterceptRequest` does not receive redirect URLs — only the
+    initial request URL — so redirect validation inside WebView callbacks
+    is not possible. Any future permitted remote data fetch must use a
+    native HTTP client (e.g., OkHttp) with automatic redirects disabled.
+    Redirects may be followed only manually, with scheme, host, effective
+    port, method, and destination validated at every hop. Remote HTML or
+    executable script content must not be injected into the game WebView.
   * A default-deny Content-Security-Policy is injected at document start:
     `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'`.
   * A network-capable WebView MUST NOT automatically receive the sensitive
@@ -263,11 +271,29 @@ Violations block release.
   files above a configurable threshold. Streaming must use chunked reads.
   Specific thresholds will be set in issue #17.
 
-- **FC-5: Renderer Death Throttled Recovery Gate**
-  `onRenderProcessGone` recovery must be limited (e.g., max N attempts in T
-  minutes). Pending delayed tasks must be cancelled in `onDestroy()` to prevent
-  Activity leaks. If recovery limit is exceeded, a user-facing error screen is
-  shown instead of a crash loop.
+- **FC-5: Renderer Death Destruction and Bounded Recreation Gate**
+  When `onRenderProcessGone` fires, the affected WebView instance is
+  permanently unusable. `reload()` or continued use of the dead instance
+  is prohibited. Recovery MUST:
+
+  1. Remove the affected WebView from its view hierarchy.
+  2. Call `destroy()` on it and clear all retained references (fields,
+     closures, message listeners).
+  3. Recreate a fresh WebView instance with the complete hardened
+     configuration: `WebViewClient`, `WebChromeClient`, `WebViewAssetLoader`,
+     origin-scoped bridge (`addWebMessageListener`), `MIXED_CONTENT_NEVER_ALLOW`,
+     `allowFileAccess = false`, `allowContentAccess = false`, and
+     document-start scripts.
+  4. Restore only validated shell state, then load the local entry point.
+  5. Return `true` from `onRenderProcessGone` after every affected WebView
+     sharing the renderer has been handled.
+
+  Retry limits apply to fresh-instance recreation (e.g., max N attempts in
+  T minutes), never to `reload()` of a dead instance. If the Activity is
+  not foreground/resumed, recreation is deferred until the next safe
+  foreground transition. Pending callbacks and delayed tasks must be
+  cancelled during destruction to prevent Activity leaks. After the bounded
+  retry limit, show an honest terminal error state.
 
 - **FC-6: Document-Start Shell Metadata Contract**
   Shell metadata (`window.__RA2_SHELL__`) must be injected **before** the
