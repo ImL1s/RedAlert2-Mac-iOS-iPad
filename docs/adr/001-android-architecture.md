@@ -168,16 +168,62 @@ Violations block release.
   (no bypass via omission).
 
 - **FC-2: Zero Public Asset Leakage Gate**
-  CI builds must run forbidden-asset scans. If any retail game asset signature,
-  private smoke probe binary, or private key is detected in git commits, APK
-  outputs, or CI logs, the build fails with non-zero exit. The scan must check
-  file content (magic bytes), not just extensions.
+  This gate has three distinct scopes:
+
+  1. **Regression scan** (CI-enforced): scan the current tracked tree and every
+     newly introduced blob in the immutable Android baseline range
+     `991945d60...HEAD` (or an explicitly reviewed equivalent range). Catches
+     retail assets that were committed and deleted within the Android work.
+     The scan must check file content (magic bytes), not just extensions.
+     If any retail game asset signature, private smoke probe binary, or
+     private key is detected, the build fails with non-zero exit.
+
+  2. **Build artifact scan** (CI-enforced): scan WebDist output, staging
+     directories, APK, AAB, symbols, and every upload candidate before
+     upload. Fails the build if any forbidden content is detected.
+
+  3. **Historical provenance** (tracked by issue #2): known pre-baseline
+     reachable retail blobs (e.g., `redalert2/public/ini.mix` in ancestor
+     `3ebf6d1`, confirmed retail by `cf899d4`) exist in the repository
+     history. CI MUST NOT claim the entire repository history is clean.
+     `PUBLIC_RELEASE_ELIGIBLE` remains blocked until the history is purged
+     (e.g., `git filter-repo`), a clean distribution repository is created,
+     or issue #2 records another evidence-backed disposition.
 
 - **FC-3: Strict Origin Isolation Gate**
-  `WebView` settings: `allowFileAccess = false`, `allowContentAccess = false`.
-  `shouldOverrideUrlLoading` must block all navigation outside
-  `https://appassets.androidplatform.net/`. Origin validation for the native
-  bridge must use exact HTTPS scheme + host + effective-port matching.
+  `WebView` settings: `allowFileAccess = false`, `allowContentAccess = false`,
+  `setMixedContentMode(MIXED_CONTENT_NEVER_ALLOW)`.
+
+  **Network permission contract:**
+
+  Sideload/no-retail and release production flavors MUST NOT declare
+  `android.permission.INTERNET`. Android v0.1 is an offline local-content
+  app; in-app WebView content served from assets does not require network
+  permission. This is the strongest subresource isolation: without the
+  permission, the OS blocks all outbound connections regardless of WebView
+  configuration.
+
+  If a future reviewed flavor legitimately requires network access, it MUST
+  satisfy all of the following before the INTERNET permission is added:
+
+  * `shouldOverrideUrlLoading` blocks all navigations outside
+    `https://appassets.androidplatform.net/`.
+  * `shouldInterceptRequest` returns a non-null error response (e.g., 403)
+    for all requests whose scheme+host does not match
+    `https://appassets.androidplatform.net`. Returning `null` is prohibited
+    because it allows WebView to fall back to network loading.
+  * Service Worker requests are subject to the same deny policy.
+  * Redirect chains cannot bypass the allowlist (validate the final resolved
+    URL, not just the initial request).
+  * A default-deny Content-Security-Policy is injected at document start:
+    `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'`.
+  * A network-capable WebView MUST NOT automatically receive the sensitive
+    native bridge; a separate threat model is required.
+  * A complete threat model for the network-capable flavor is documented
+    and reviewed before merge.
+
+  Origin validation for the native bridge must use exact HTTPS scheme +
+  host + effective-port matching.
 
   **Native bridge security contract:**
 
@@ -187,10 +233,17 @@ Violations block release.
 
   * **Preferred**: `WebViewCompat.addWebMessageListener` with exact
     allowed-origin rules (scoped to `https://appassets.androidplatform.net`).
-    This provides caller-origin validation per message.
-  * **Alternative**: A supported origin-restricted `WebViewBuilder` /
-    `RestrictionAllowlist` implementation, after an explicit dependency review
-    and documentation of the origin-restriction guarantee.
+    This provides caller-origin validation per message. The implementation
+    MUST verify `WebViewFeature.isFeatureSupported(WEB_MESSAGE_LISTENER)`
+    at runtime before registration; if unsupported, the shell fails to an
+    error state rather than falling back to an unscoped mechanism.
+  * **Experimental alternative only**: `WebViewBuilder` /
+    `RestrictionAllowlist` (`@WebViewBuilder.Experimental`) may be evaluated
+    after explicit experimental API opt-in, dependency review, and runtime
+    feature detection (`WEBVIEW_BUILDER_EXPERIMENTAL_V1` /
+    `WEBVIEW_BUILDER_EXPERIMENTAL_V2`). It is NOT the default v0.1 security
+    path and must not be used without documenting the experimental status
+    and fallback behavior.
 
   **Legacy `addJavascriptInterface` limitations (recorded for reference):**
   `addJavascriptInterface` is visible to every frame in the WebView and does
@@ -260,8 +313,9 @@ Violations block release.
 - Atomic PR split enables independent review and bisection.
 
 ### Open Questions (to be resolved in implementation PRs)
-- **INTERNET permission**: Is it needed at all? If yes, restrict to
-  `android:usesCleartextTraffic="false"` and evaluate `NetworkSecurityConfig`.
+- **INTERNET permission**: FC-3 now prohibits it for sideload/production
+  flavors. If a future network-capable flavor is proposed, it must satisfy
+  the full subresource isolation contract in FC-3 and provide a threat model.
 - **ProGuard/R8**: Enable for release builds; add `@Keep` rules for bridge
   methods exposed via `addWebMessageListener` callbacks.
 - **`ra2cd.mix` fate**: Determine if it contains only custom assets (keep) or
