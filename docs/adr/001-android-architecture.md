@@ -223,8 +223,17 @@ Violations block release.
     Redirects may be followed only manually, with scheme, host, effective
     port, method, and destination validated at every hop. Remote HTML or
     executable script content must not be injected into the game WebView.
-  * A default-deny Content-Security-Policy is injected at document start:
-    `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'`.
+  * A default-deny Content-Security-Policy MUST be enforced. Because the
+    document-start JavaScript API only guarantees execution before page
+    scripts — not before the HTML parser or preload scanner initiates
+    subresource requests — a dynamically injected CSP via JavaScript cannot
+    serve as the fail-closed subresource gate. The CSP MUST be delivered as:
+    (a) an HTTP response header injected by `shouldInterceptRequest` into
+    every `WebResourceResponse` for HTML documents, or (b) a static
+    `<meta http-equiv="Content-Security-Policy">` element placed before all
+    resource-bearing markup in the served HTML. The policy MUST include at
+    minimum: `default-src 'self'; script-src 'self'; style-src 'self'
+    'unsafe-inline'`.
   * A network-capable WebView MUST NOT automatically receive the sensitive
     native bridge; a separate threat model is required.
   * A complete threat model for the network-capable flavor is documented
@@ -267,9 +276,27 @@ Violations block release.
   reviewed per-PR.
 
 - **FC-4: Memory-Bounded Streaming Gate**
-  Asset streaming must not load whole files into RAM via `arrayBuffer()` for
-  files above a configurable threshold. Streaming must use chunked reads.
-  Specific thresholds will be set in issue #17.
+  Asset streaming must not load whole files into RAM. Both the Kotlin
+  native layer and the JavaScript OPFS seeder must enforce a concrete
+  peak in-flight byte bound:
+
+  * The Kotlin `shouldInterceptRequest` / SAF streaming layer must use
+    chunked `BufferedInputStream` reads (e.g., 64 KB buffer) and write
+    or pipe each chunk before reading the next. Concatenating all chunks
+    in memory is prohibited.
+  * The JavaScript OPFS seeder must use streaming reads (e.g.,
+    `ReadableStream` / `getReader()`) with incremental writes to OPFS.
+    `arrayBuffer()` or equivalent whole-file reads are prohibited for
+    files above the threshold.
+  * Integrity verification (SHA-256) must use incremental hashing
+    (`update()` per chunk, `digest()` at end), not hash-after-full-read.
+  * Each buffer must be released (dereferenced / closed) promptly after
+    the chunk is consumed; holding all chunks until completion defeats
+    the bound.
+  * The peak in-flight byte threshold will be set in issue #17 based on
+    measured device memory profiles. Until set, implementations must
+    document their actual peak allocation and provide evidence it does
+    not exceed a stated cap.
 
 - **FC-5: Renderer Death Destruction and Bounded Recreation Gate**
   When `onRenderProcessGone` fires, the affected WebView instance is
