@@ -1,6 +1,7 @@
 package com.ammaar.ra2web
 
 import android.content.Context
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -11,7 +12,7 @@ import com.ammaar.ra2web.security.UrlSecurityValidator
 open class NavigationGuardWebViewClient(
     private val context: Context,
     private val assetLoader: WebViewAssetLoader,
-    private val nativeBridge: com.ammaar.ra2web.bridge.NativeBridge? = null
+    private val onRenderProcessGoneCallback: ((WebView?, RenderProcessGoneDetail?) -> Boolean)? = null
 ) : WebViewClient() {
 
     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
@@ -38,19 +39,11 @@ open class NavigationGuardWebViewClient(
         return assetLoader.shouldInterceptRequest(url)
     }
 
-    override fun onPageFinished(view: WebView?, url: String?) {
-        super.onPageFinished(view, url)
-        if (UrlSecurityValidator.isAllowedUrl(url)) {
-            nativeBridge?.onTrustedPageLoaded(url)
-            val script = """
-                if (!window.__RA2_SHELL__) {
-                    window.__RA2_SHELL__ = {
-                        platform: 'android',
-                        version: '0.1.0'
-                    };
-                }
-            """.trimIndent()
-            view?.evaluateJavascript(script, null)
-        }
+    override fun onRenderProcessGone(
+        view: WebView?,
+        detail: RenderProcessGoneDetail?
+    ): Boolean {
+        return onRenderProcessGoneCallback?.invoke(view, detail)
+            ?: super.onRenderProcessGone(view, detail)
     }
 }

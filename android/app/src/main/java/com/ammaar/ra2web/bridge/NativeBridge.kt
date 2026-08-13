@@ -1,46 +1,42 @@
 package com.ammaar.ra2web.bridge
 
-import android.webkit.JavascriptInterface
+import android.net.Uri
 import android.webkit.WebView
 import androidx.annotation.Keep
+import androidx.webkit.JavaScriptReplyProxy
+import androidx.webkit.WebMessageCompat
+import androidx.webkit.WebViewCompat
 import com.ammaar.ra2web.security.UrlSecurityValidator
-import java.util.concurrent.atomic.AtomicReference
+import org.json.JSONObject
 
 @Keep
-class NativeBridge(private val webView: WebView) {
+class NativeBridge : WebViewCompat.WebMessageListener {
 
-    /**
-     * Tracks the last known trusted URL, updated from the main thread via
-     * NavigationGuardWebViewClient.onPageFinished(). This avoids calling
-     * webView.url from the @JavascriptInterface background thread, which
-     * would throw a wrong-thread exception on modern Android.
-     */
-    private val lastTrustedUrl = AtomicReference<String?>(null)
+    override fun onPostMessage(
+        view: WebView,
+        message: WebMessageCompat,
+        sourceOrigin: Uri,
+        isMainFrame: Boolean,
+        replyProxy: JavaScriptReplyProxy
+    ) {
+        val originStr = sourceOrigin.toString()
+        if (!UrlSecurityValidator.isAllowedUrl(originStr)) {
+            return
+        }
 
-    /** Called from the main thread by NavigationGuardWebViewClient.onPageFinished(). */
-    fun onTrustedPageLoaded(url: String?) {
-        lastTrustedUrl.set(url)
+        val response = JSONObject().apply {
+            put("platform", getPlatform())
+            put("version", getVersion())
+            put("request", message.data)
+        }
+        replyProxy.postMessage(response.toString())
     }
 
-    private fun isOriginAllowed(): Boolean {
-        return UrlSecurityValidator.isAllowedUrl(lastTrustedUrl.get())
-    }
+    fun getPlatform(): String = "android"
 
-    @Keep
-    @JavascriptInterface
-    fun getPlatform(): String {
-        if (!isOriginAllowed()) return ""
-        return "android"
-    }
-
-    @Keep
-    @JavascriptInterface
-    fun getVersion(): String {
-        if (!isOriginAllowed()) return ""
-        return "0.1.0"
-    }
+    fun getVersion(): String = "0.1.0"
 
     companion object {
-        const val INTERFACE_NAME = "AndroidNativeBridge"
+        const val OBJECT_NAME = "ra2NativeBridge"
     }
 }

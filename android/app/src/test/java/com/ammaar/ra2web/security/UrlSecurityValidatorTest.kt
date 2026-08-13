@@ -8,19 +8,19 @@ class UrlSecurityValidatorTest {
 
     @Test
     fun testAllowedAppAssetsUrl() {
-        assertTrue(UrlSecurityValidator.isAllowedUrl("https://appassets.androidlocal/index.html"))
-        assertTrue(UrlSecurityValidator.isAllowedUrl("https://appassets.androidlocal/WebDist/index.html"))
-        assertTrue(UrlSecurityValidator.isAllowedUrl("https://appassets.androidlocal/res/img/logo.png"))
-        assertTrue(UrlSecurityValidator.isAllowedUrl("https://appassets.androidlocal"))
+        assertTrue(UrlSecurityValidator.isAllowedUrl("https://appassets.androidplatform.net/index.html"))
+        assertTrue(UrlSecurityValidator.isAllowedUrl("https://appassets.androidplatform.net/WebDist/index.html"))
+        assertTrue(UrlSecurityValidator.isAllowedUrl("https://appassets.androidplatform.net/res/img/logo.png"))
+        assertTrue(UrlSecurityValidator.isAllowedUrl("https://appassets.androidplatform.net"))
     }
 
     @Test
     fun testBlockedExternalUrls() {
         assertFalse(UrlSecurityValidator.isAllowedUrl("https://evil.com"))
         assertFalse(UrlSecurityValidator.isAllowedUrl("http://evil.com"))
-        assertFalse(UrlSecurityValidator.isAllowedUrl("http://appassets.androidlocal/"))
-        assertFalse(UrlSecurityValidator.isAllowedUrl("https://evil.com/appassets.androidlocal"))
-        assertFalse(UrlSecurityValidator.isAllowedUrl("https://appassets.androidlocal.evil.com/"))
+        assertFalse(UrlSecurityValidator.isAllowedUrl("http://appassets.androidplatform.net/"))
+        assertFalse(UrlSecurityValidator.isAllowedUrl("https://evil.com/appassets.androidplatform.net"))
+        assertFalse(UrlSecurityValidator.isAllowedUrl("https://appassets.androidplatform.net.evil.com/"))
         assertFalse(UrlSecurityValidator.isAllowedUrl("file:///android_asset/index.html"))
         assertFalse(UrlSecurityValidator.isAllowedUrl("javascript:alert(1)"))
         assertFalse(UrlSecurityValidator.isAllowedUrl(null))
