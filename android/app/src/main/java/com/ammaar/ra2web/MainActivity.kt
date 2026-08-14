@@ -1,12 +1,16 @@
 package com.ammaar.ra2web
 
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowInsetsController
@@ -19,13 +23,16 @@ import org.json.JSONObject
 
 class MainActivity : AppCompatActivity(), NativeBridge.SafBridgeHandler {
 
-    private lateinit var webViewHost: WebViewHost
+    internal lateinit var webViewHost: WebViewHost
     private lateinit var safManager: SafResourcePackManager
     private var pendingSafPickCallback: ((JSONObject) -> Unit)? = null
 
     private var audioManager: AudioManager? = null
     private var audioFocusRequest: AudioFocusRequest? = null
     private var legacyAudioFocusListener: AudioManager.OnAudioFocusChangeListener? = null
+
+    private var thermalListener: PowerManager.OnThermalStatusChangedListener? = null
+    private var powerSaveReceiver: BroadcastReceiver? = null
 
     private val openDocumentTreeLauncher = registerForActivityResult(
         ActivityResultContracts.OpenDocumentTree()
@@ -59,6 +66,7 @@ class MainActivity : AppCompatActivity(), NativeBridge.SafBridgeHandler {
         setupFullscreen()
         setupBackNavigation()
         setupAudioManagement()
+        setupThermalAndPowerMonitoring()
         webViewHost.setup()
     }
 
@@ -183,6 +191,66 @@ class MainActivity : AppCompatActivity(), NativeBridge.SafBridgeHandler {
         }
     }
 
+    internal fun setupThermalAndPowerMonitoring() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            thermalListener = PowerManager.OnThermalStatusChangedListener { status ->
+                val thermalState = mapThermalStatus(status)
+                val lowPowerMode = powerManager.isPowerSaveMode
+                webViewHost.updateThermalState(thermalState, lowPowerMode)
+            }
+            try {
+                powerManager.addThermalStatusListener(thermalListener!!)
+            } catch (_: Exception) {}
+        }
+
+        powerSaveReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                if (PowerManager.ACTION_POWER_SAVE_MODE_CHANGED == intent?.action) {
+                    val thermalState = getThermalStateName()
+                    val lowPowerMode = powerManager.isPowerSaveMode
+                    webViewHost.updateThermalState(thermalState, lowPowerMode)
+                }
+            }
+        }
+        val filter = IntentFilter(PowerManager.ACTION_POWER_SAVE_MODE_CHANGED)
+        registerReceiver(powerSaveReceiver, filter)
+    }
+
+    internal fun unregisterThermalAndPowerMonitoring() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && thermalListener != null) {
+            try {
+                powerManager?.removeThermalStatusListener(thermalListener!!)
+            } catch (_: Exception) {}
+            thermalListener = null
+        }
+        if (powerSaveReceiver != null) {
+            try {
+                unregisterReceiver(powerSaveReceiver)
+            } catch (_: Exception) {}
+            powerSaveReceiver = null
+        }
+    }
+
+    fun mapThermalStatus(status: Int): String {
+        return ThermalStatusMapper.mapThermalStatus(status)
+    }
+
+    fun getThermalStateName(): String {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+            val status = powerManager?.currentThermalStatus ?: return "nominal"
+            return mapThermalStatus(status)
+        }
+        return "nominal"
+    }
+
+    fun getLowPowerMode(): Boolean {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as? PowerManager
+        return powerManager?.isPowerSaveMode == true
+    }
+
     override fun onResume() {
         super.onResume()
         setupFullscreen()
@@ -207,6 +275,7 @@ class MainActivity : AppCompatActivity(), NativeBridge.SafBridgeHandler {
 
     override fun onDestroy() {
         webViewHost.evaluateJavascript("window.__RA2_LIFECYCLE__ && window.__RA2_LIFECYCLE__({ type: 'destroy' });")
+        unregisterThermalAndPowerMonitoring()
         webViewHost.onDestroy()
         super.onDestroy()
     }
