@@ -1,18 +1,26 @@
 # --- Game assets: NEVER commit retail-derived files ---
 # Produced by scripts/prepare-gameres.ts from a legally-owned RA2 install.
+*.mix
+*.csf
 gameres-export/
 ios/Resources/GameRes/
 ios/Resources/WebDist/
+android/app/src/main/assets/WebDist/
 redalert2/public/local-pack/
-# Retail English string tables, extracted from your language(md).mix at import time.
 redalert2/public/general.csf
 redalert2/public/generalmd.csf
-# Chinese original, kept locally as a reference backup only.
 redalert2/public/general.zh-CN.csf
-# Upstream shipped this CDN-delivery bundle of retail INI data. Nothing in the
-# local/iOS boot path reads it (GameRes only loads it on the CDN branch), so it
-# is not distributed here. Verified by deleting it and playing a full match.
 redalert2/public/ini.mix
+
+# --- Private probe assets & Android build outputs ---
+private-probe-assets/
+private-smoke-assets/
+android/app/src/privateSmoke/assets/
+android/app/src/privateSmoke/res/
+*.apk
+android/.gradle/
+android/app/build/
+android/build/
 
 # --- Dependencies ---
 node_modules/
@@ -29,21 +37,19 @@ ios/RA2.xcodeproj/
 # --- Xcode / macOS ---
 .DS_Store
 *.xcuserstate
-xcuserdata/
-
-# --- Editor / misc ---
-*.log
-.vscode/
-.idea/
+userdata/
 certs/
 .claude/
 
-# --- Agent / AI orchestration artifacts ---
+# --- Agent orchestration artifacts (not project code) ---
 .agents/
 ORIGINAL_REQUEST.md
 PROJECT.md
 TEST_INFRA.md
 TEST_READY.md
+
+# --- Android local config (machine-specific SDK paths) ---
+android/local.properties
 
 # --- Test output ---
 test-results/

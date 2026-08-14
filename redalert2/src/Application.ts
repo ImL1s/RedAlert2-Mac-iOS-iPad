@@ -182,6 +182,42 @@ export class Application {
             console.error("Failed to load application configuration (config.ini). Using minimal defaults. Some features may not work.");
         }
     }
+    private async loadCsfArrayBufferFromUserPack(csfFileName: string): Promise<ArrayBuffer | null> {
+        // 1. Try OPFS storage (user resource pack seeded into OPFS)
+        if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.getDirectory) {
+            try {
+                const root = await navigator.storage.getDirectory();
+                const segments = csfFileName.split('/').filter(Boolean);
+                const fileName = segments.pop();
+                if (fileName) {
+                    let dir = root;
+                    for (const seg of segments) {
+                        dir = await dir.getDirectoryHandle(seg);
+                    }
+                    const handle = await dir.getFileHandle(fileName);
+                    const file = await handle.getFile();
+                    console.log(`[Application] Successfully read CSF file "${csfFileName}" from OPFS user pack.`);
+                    return await file.arrayBuffer();
+                }
+            } catch {
+                // Not found in OPFS
+            }
+        }
+
+        // 2. Try /gameres/ route (served by native shell or local content router from user pack)
+        try {
+            const gameresResponse = await fetch(`/gameres/${csfFileName}`);
+            if (gameresResponse.ok) {
+                console.log(`[Application] Successfully fetched CSF file "${csfFileName}" from /gameres/ user pack.`);
+                return await gameresResponse.arrayBuffer();
+            }
+        } catch {
+            // Not found in /gameres/
+        }
+
+        return null;
+    }
+
     private async loadTranslations(): Promise<void> {
         const currentConfig = this.config;
         if (!currentConfig) {
@@ -192,13 +228,12 @@ export class Application {
         }
         let csfFileValue = currentConfig.getGeneralData().get('csfFile') || 'ra2/general.csf';
         const csfFileName = Array.isArray(csfFileValue) ? csfFileValue[0] : csfFileValue;
-        console.log(`[Application] Attempting to load CSF file: ${csfFileName}`);
+        console.log(`[Application] Attempting to load CSF file strictly from user pack: ${csfFileName}`);
         try {
-            const csfResponse = await fetch(`/${csfFileName}`);
-            if (!csfResponse.ok) {
-                throw new Error(`Failed to fetch CSF file ${csfFileName}: ${csfResponse.status} ${csfResponse.statusText}`);
+            const arrayBuffer = await this.loadCsfArrayBufferFromUserPack(csfFileName);
+            if (!arrayBuffer) {
+                throw new Error(`CSF file "${csfFileName}" not present in OPFS or /gameres/ user pack.`);
             }
-            const arrayBuffer = await csfResponse.arrayBuffer();
             const dataStream = new DataStream(arrayBuffer, 0, DataStream.LITTLE_ENDIAN);
             dataStream.dynamicSize = false;
             const virtualFile = new VirtualFile(dataStream, csfFileName);
@@ -208,8 +243,7 @@ export class Application {
             console.log(`[Application] CSF file "${csfFileName}" loaded. Detected/Set Locale: ${this.currentLocale}. Loaded ${Object.keys(this.strings.getKeys()).length} keys from CSF.`);
         }
         catch (error) {
-            console.error(`[Application] Failed to load or parse CSF file "${csfFileName}":`, error);
-            console.warn('[Application] Falling back to empty Strings object for CSF part.');
+            console.warn(`[Application] CSF file "${csfFileName}" not available in user pack (falling back to locale JSON):`, error);
             this.strings = new Strings();
             this.currentLocale = currentConfig.defaultLocale;
         }
