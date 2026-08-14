@@ -33,9 +33,23 @@ class DiagnosticBundleManager(private val context: Context) {
         }
         bundleJson.put("metadata", metadata)
 
-        val activity = context as? MainActivity
-        bundleJson.put("thermalState", activity?.getThermalStateName() ?: "nominal")
-        bundleJson.put("lowPowerMode", activity?.getLowPowerMode() ?: false)
+        val powerManager = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+        val thermalStatus = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && powerManager != null) {
+            when (powerManager.currentThermalStatus) {
+                android.os.PowerManager.THERMAL_STATUS_NONE -> "nominal"
+                android.os.PowerManager.THERMAL_STATUS_LIGHT -> "light"
+                android.os.PowerManager.THERMAL_STATUS_MODERATE -> "moderate"
+                android.os.PowerManager.THERMAL_STATUS_SEVERE -> "severe"
+                android.os.PowerManager.THERMAL_STATUS_CRITICAL -> "critical"
+                android.os.PowerManager.THERMAL_STATUS_EMERGENCY -> "emergency"
+                android.os.PowerManager.THERMAL_STATUS_SHUTDOWN -> "shutdown"
+                else -> "nominal"
+            }
+        } else {
+            "nominal"
+        }
+        bundleJson.put("thermalState", thermalStatus)
+        bundleJson.put("lowPowerMode", powerManager?.isPowerSaveMode ?: false)
 
         val memoryInfo = ActivityManager.MemoryInfo()
         val activityManager = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager

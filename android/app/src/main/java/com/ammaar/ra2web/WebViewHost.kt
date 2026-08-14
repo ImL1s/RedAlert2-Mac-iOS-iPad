@@ -7,6 +7,7 @@ import android.util.AttributeSet
 import android.view.ViewGroup
 import android.webkit.WebSettings
 import android.webkit.WebView
+import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -145,6 +146,7 @@ class WebViewHost @JvmOverloads constructor(
             orientation = LinearLayout.VERTICAL
             setPadding(48, 48, 48, 48)
             setBackgroundColor(Color.rgb(24, 24, 24))
+            gravity = android.view.Gravity.CENTER
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.MATCH_PARENT
@@ -156,6 +158,7 @@ class WebViewHost @JvmOverloads constructor(
             setTextColor(Color.RED)
             textSize = 20f
             setTypeface(null, Typeface.BOLD)
+            gravity = android.view.Gravity.CENTER
             setPadding(0, 0, 0, 16)
         }
         container.addView(titleView)
@@ -164,9 +167,41 @@ class WebViewHost @JvmOverloads constructor(
             text = message
             setTextColor(Color.WHITE)
             textSize = 14f
+            gravity = android.view.Gravity.CENTER
             setPadding(0, 0, 0, 24)
         }
         container.addView(messageView)
+
+        val retryBtn = Button(context).apply {
+            text = "Retry"
+            setOnClickListener {
+                crashRateLimiter.reset()
+                createAndAttachWebView()
+            }
+        }
+        container.addView(retryBtn)
+
+        val clearCacheBtn = Button(context).apply {
+            text = "Clear Cache & Re-seed"
+            setOnClickListener {
+                try {
+                    context.cacheDir?.deleteRecursively()
+                    java.io.File(context.filesDir, "gameres").deleteRecursively()
+                } catch (_: Exception) {}
+                crashRateLimiter.reset()
+                createAndAttachWebView()
+            }
+        }
+        container.addView(clearCacheBtn)
+
+        val diagBtn = Button(context).apply {
+            text = "Export Diagnostic Bundle"
+            setOnClickListener {
+                val bundleManager = DiagnosticBundleManager(context)
+                bundleManager.shareBundleZip()
+            }
+        }
+        container.addView(diagBtn)
 
         addView(container)
     }
