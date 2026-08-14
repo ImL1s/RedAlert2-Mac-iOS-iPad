@@ -92,11 +92,11 @@ class WebViewHost @JvmOverloads constructor(
             .addPathHandler("/", WebViewAssetLoader.AssetsPathHandler(context))
             .build()
 
-        webViewInstance.webViewClient = NavigationGuardWebViewClient(
+        webViewInstance.webViewClient = LocalContentWebViewClient(
             context = context,
             assetLoader = assetLoader,
-            onRenderProcessGoneCallback = { deadView, _ ->
-                handleRenderProcessGone(deadView)
+            onRenderProcessGoneListener = { didCrash ->
+                handleRenderProcessGone(webViewInstance)
             }
         )
 
