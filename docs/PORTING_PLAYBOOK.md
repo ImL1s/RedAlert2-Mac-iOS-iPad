@@ -867,4 +867,6 @@ iOS shell:
 | Lifecycle | `UIApplication` delegate | `Activity` lifecycle + `OnBackPressedDispatcher` |
 
 Nothing in this table has been implemented yet. See the ADR for the
-dependency graph and fail-closed invariants that gate each implementation PR.
+dependency graph and fail-closed invariants that gate each implementation PR,
+and [PERFORMANCE_BUDGETS.md](PERFORMANCE_BUDGETS.md) for target memory, startup,
+frame-pacing, and device-tier performance thresholds.
