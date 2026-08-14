@@ -25,7 +25,7 @@ export class WorldInteraction {
     private lastKeyMods?: KeyboardEvent;
     private hasFaultyCtrlLeftClick = false;
     public chatTypingHandler?: any;
-    constructor(private readonly worldScene: any, private readonly pointer: any, private readonly pointerEvents: any, private readonly cameraPanHandler: any, private readonly mapScrollHandler: any, private readonly mapHoverHandler: any, private readonly tooltipHandler: any, public readonly entityIntersectHelper: any, public readonly unitSelectionHandler: any, public readonly defaultActionHandler: any, public readonly keyboardHandler: any, public readonly arrowScrollHandler: any, public readonly customScrollHandler: any, public readonly minimapHandler: any, private readonly cameraZoom: any, private readonly document: Document, private readonly renderer: any, public readonly targetLines: any, private readonly rightClickMove: any, private readonly rightClickScroll: any, private readonly battleControlApi: any, public readonly gamepadHandler?: any) { }
+    constructor(private readonly worldScene: any, private readonly pointer: any, private readonly pointerEvents: any, private readonly cameraPanHandler: any, private readonly mapScrollHandler: any, private readonly mapHoverHandler: any, private readonly tooltipHandler: any, public readonly entityIntersectHelper: any, public readonly unitSelectionHandler: any, public readonly defaultActionHandler: any, public readonly keyboardHandler: any, public readonly arrowScrollHandler: any, public readonly customScrollHandler: any, public readonly minimapHandler: any, private readonly cameraZoom: any, private readonly document: Document, private readonly renderer: any, public readonly targetLines: any, private readonly rightClickMove: any, private readonly rightClickScroll: any, private readonly battleControlApi: any) { }
     init(): void {
         if (this.initialized) {
             return;
@@ -36,7 +36,6 @@ export class WorldInteraction {
         this.hasFaultyCtrlLeftClick = isMacFirefox();
         this.battleControlApi?._setWorldInteraction(this);
         this.battleControlApi?._notifyToggle(true);
-        this.gamepadHandler?.init?.();
     }
     setShroud(shroud: any): void {
         this.mapHoverHandler.setShroud(shroud);
@@ -87,7 +86,6 @@ export class WorldInteraction {
             this.battleControlApi?._setWorldInteraction(undefined);
             this.battleControlApi?._notifyToggle(false);
         }
-        this.gamepadHandler?.dispose?.();
         this.currentMode?.dispose?.();
         this.mapScrollHandler.dispose();
         this.cameraPanHandler.dispose();
@@ -104,7 +102,6 @@ export class WorldInteraction {
             return;
         }
         this.enabled = enabled;
-        this.gamepadHandler?.setEnabled?.(enabled);
         if (enabled) {
             this.setupHandlers();
         }
