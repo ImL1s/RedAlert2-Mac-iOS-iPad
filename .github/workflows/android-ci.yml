@@ -1,0 +1,122 @@
+name: Android CI & Security Gates
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-verify:
+    name: Build, Verify & Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.10'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Web Dependencies
+        run: |
+          cd redalert2
+          bun install --frozen-lockfile
+
+      - name: Run Web Unit Tests
+        run: |
+          cd redalert2
+          bun test
+
+      - name: Build Web Application (Vite Dist)
+        run: |
+          cd redalert2
+          bun --bun vite build
+
+      - name: Stage WebDist to Android Assets
+        run: |
+          rm -rf android/app/src/main/assets/WebDist
+          mkdir -p android/app/src/main/assets
+          cp -R redalert2/dist android/app/src/main/assets/WebDist
+          rm -rf android/app/src/main/assets/WebDist/local-pack
+
+      - name: Run 5-Point Static Security & No-Retail Asset Scanner
+        run: |
+          chmod +x scripts/verify-no-retail-assets.sh
+          ./scripts/verify-no-retail-assets.sh
+
+      - name: Verify Release Status & Truth Gate
+        run: |
+          node scripts/verify-release-status.js enforceBlocked
+
+      - name: Set up Gradle Executable
+        run: |
+          chmod +x android/gradlew
+
+      - name: Run Android Public CI Unit Tests
+        run: |
+          cd android
+          ./gradlew testPublicCiDebugUnitTest
+
+      - name: Assemble Public CI Debug APK
+        run: |
+          cd android
+          ./gradlew assemblePublicCiDebug
+
+      - name: Inspect Compiled APK for Forbidden Assets
+        run: |
+          APK_PATH="android/app/build/outputs/apk/publicCi/debug/app-publicCi-debug.apk"
+          ./scripts/verify-no-retail-assets.sh "$APK_PATH"
+
+      - name: Generate Artifact Checksums & SBOM Manifest
+        run: |
+          APK_PATH="android/app/build/outputs/apk/publicCi/debug/app-publicCi-debug.apk"
+          node scripts/verify-release-status.js publicRelease "$APK_PATH"
+
+      - name: Upload Public CI APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-publicCi-debug
+          path: android/app/build/outputs/apk/publicCi/debug/app-publicCi-debug.apk
+          if-no-files-found: error
+
+      - name: Upload Build Manifest & Provenance Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-manifest
+          path: android/app/build/outputs/apk-manifest.json
+          if-no-files-found: error
+
+      - name: Release Truth Gate Dry Run
+        run: |
+          node -e "
+          const status = require('./docs/android/release-status.json');
+          if (!status.publicReleaseBlocked) {
+            console.error('CRITICAL: Public release status is unblocked without legal clearance!');
+            process.exit(1);
+          }
+          console.log('PASS: Release gate confirmed. Public store publication is strictly BLOCKED.');
+          "
