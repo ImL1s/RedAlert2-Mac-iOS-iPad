@@ -12,7 +12,7 @@ body {
        in Application.getAvailableDisplaySize — measuring the full visual
        viewport while the root is centred in a smaller content box is what
        clipped ~12px off the top of the menus. */
-    padding: env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left);
+    padding: var(--safe-area-inset-top, env(safe-area-inset-top)) var(--safe-area-inset-right, env(safe-area-inset-right)) 0 var(--safe-area-inset-left, env(safe-area-inset-left));
     box-sizing: border-box;
     overflow: hidden;
     display: flex;

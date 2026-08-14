@@ -199,6 +199,12 @@ class WebViewHost @JvmOverloads constructor(
         evaluateJavascript(js)
     }
 
+    fun updateSafeAreaInsets(top: Float, right: Float, bottom: Float, left: Float) {
+        val insets = InsetsDpi(top, right, bottom, left)
+        val js = SafeAreaHelper.generateCssVariablesScript(insets)
+        evaluateJavascript(js)
+    }
+
     fun onDestroy() {
         webView?.let {
             (it.parent as? ViewGroup)?.removeView(it)
