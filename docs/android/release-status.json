@@ -41,7 +41,7 @@
       "name": "Android Kotlin Shell",
       "path": "android/",
       "license": "GPL-3.0-or-later",
-      "provenance": "Original development for RedAlert2-Mac-iOS-iPad project"
+      "provenance": "Original development for RedAlert2-Android-iOS-iPad project"
     },
     {
       "name": "Red Alert 2 Engine",

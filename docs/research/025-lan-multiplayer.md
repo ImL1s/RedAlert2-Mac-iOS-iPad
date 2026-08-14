@@ -1,6 +1,6 @@
 # Research & Hardening Report #025: Android LAN Multiplayer & Lockstep Hardening
 
-**Project**: RedAlert2 Android Port (`ImL1s/RedAlert2-Mac-iOS-iPad`)  
+**Project**: RedAlert2 Android Port (`ImL1s/RedAlert2-Android-iOS-iPad`)  
 **Document ID**: RR-025-LAN  
 **Status**: Completed / Evaluated (P2 Post-v0.1 Roadmap)  
 **Date**: 2026-08-14  
