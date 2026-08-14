@@ -25,6 +25,20 @@ your install:
 ./scripts/setup.sh /path/to/your/ra2/install
 ```
 
+## Android Port (v0.1)
+
+Red Alert 2 & Yuri's Revenge is supported on Android devices (API 29+ / Android 10+):
+
+- **Native Kotlin Shell**: Full-screen edge-to-edge Android `WebView` container (`android/`) with memory-bounded chunk streaming.
+- **Zero Retail Asset Distribution**: All proprietary game resources are loaded dynamically from user-owned resource packs via Android Storage Access Framework (SAF).
+- **Architecture & Guides**:
+  - [Android Overview](docs/android/README.md)
+  - [Developer Setup Guide](docs/android/SETUP.md)
+  - [Build & Deployment Guide](docs/android/BUILD.md)
+  - [Troubleshooting & Diagnostics](docs/android/TROUBLESHOOTING.md)
+  - [ADR-001 Architecture Baseline](docs/adr/001-android-architecture.md)
+  - [Licensing & Provenance Framework](docs/android/LICENSING_AND_PROVENANCE.md)
+
 ## Why this port is shaped differently than Generals
 
 The sibling project ([Generals-Mac-iOS-iPad](https://github.com/ammaarreshi/Generals-Mac-iOS-iPad))
