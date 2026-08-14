@@ -1,11 +1,10 @@
 import { StorageKey } from '../LocalPrefs';
 import { GameResSource } from '../engine/gameRes/GameResSource';
+import { isNativeShell, getShellPlatform, isIOSNativeShell, isAndroidNativeShell } from './nativeBridge';
 
-declare global {
-    interface Window {
-        __RA2_SHELL__?: { platform: string; version: string };
-    }
-}
+// Re-export platform detection for backward compatibility.
+// Consumers that import { isNativeShell } from './iosSeed' continue to work.
+export { isNativeShell, getShellPlatform, isIOSNativeShell, isAndroidNativeShell };
 
 interface SeedManifest {
     files: { path: string; size: number }[];
@@ -130,12 +129,7 @@ export function installShellRepl(): void {
     poll();
 }
 
-export function isNativeShell(): boolean {
-    if (window.__RA2_SHELL__)
-        return true;
-    // Dev aid: lets a desktop browser exercise the shell code paths.
-    return new URLSearchParams(window.location.search).has('shell');
-}
+// isNativeShell is now defined in nativeBridge.ts and re-exported above.
 
 /**
  * First-launch bootstrap for the native shell: copies the bundled, pre-imported
