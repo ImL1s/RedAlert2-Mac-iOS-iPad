@@ -37,7 +37,7 @@ export class KeyBinds {
         }
         if (useDefault) {
             iniFile = this.defaultIni;
-            for (const [commandType, keyCode] of new Map([
+            const defaultBindings: [KeyCommandType, number][] = [
                 [KeyCommandType.PreviousObject, "M".charCodeAt(0)],
                 [KeyCommandType.VeterancyNav, "Y".charCodeAt(0)],
                 [KeyCommandType.HealthNav, "U".charCodeAt(0)],
@@ -45,10 +45,49 @@ export class KeyBinds {
                 [KeyCommandType.BuildCheat, 593],
                 [KeyCommandType.ToggleFps, 512 + "R".charCodeAt(0)],
                 [KeyCommandType.ToggleShroud, 1024 + "S".charCodeAt(0)],
-            ])) {
+                [KeyCommandType.CenterBase, "H".charCodeAt(0)],
+                [KeyCommandType.StopObject, "S".charCodeAt(0)],
+                [KeyCommandType.DeployObject, "D".charCodeAt(0)],
+                [KeyCommandType.ScatterObject, "X".charCodeAt(0)],
+                [KeyCommandType.CenterOnRadarEvent, 32], // Space
+                [KeyCommandType.CombatantSelect, "E".charCodeAt(0)],
+                [KeyCommandType.TypeSelect, "T".charCodeAt(0)],
+                [KeyCommandType.GuardObject, "G".charCodeAt(0)],
+                [KeyCommandType.Follow, "F".charCodeAt(0)],
+                [KeyCommandType.ToggleRepair, "K".charCodeAt(0)],
+                [KeyCommandType.ToggleSell, "L".charCodeAt(0)],
+                [KeyCommandType.StructureTab, "Q".charCodeAt(0)],
+                [KeyCommandType.DefenseTab, "W".charCodeAt(0)],
+                [KeyCommandType.InfantryTab, "E".charCodeAt(0)],
+                [KeyCommandType.UnitTab, "R".charCodeAt(0)],
+                [KeyCommandType.Options, 27], // Escape
+                [KeyCommandType.TeamSelect_1, "1".charCodeAt(0)],
+                [KeyCommandType.TeamSelect_2, "2".charCodeAt(0)],
+                [KeyCommandType.TeamSelect_3, "3".charCodeAt(0)],
+                [KeyCommandType.TeamSelect_4, "4".charCodeAt(0)],
+                [KeyCommandType.TeamSelect_5, "5".charCodeAt(0)],
+                [KeyCommandType.TeamSelect_6, "6".charCodeAt(0)],
+                [KeyCommandType.TeamSelect_7, "7".charCodeAt(0)],
+                [KeyCommandType.TeamSelect_8, "8".charCodeAt(0)],
+                [KeyCommandType.TeamSelect_9, "9".charCodeAt(0)],
+                [KeyCommandType.TeamSelect_10, "0".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_1, 512 + "1".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_2, 512 + "2".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_3, 512 + "3".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_4, 512 + "4".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_5, 512 + "5".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_6, 512 + "6".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_7, 512 + "7".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_8, 512 + "8".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_9, 512 + "9".charCodeAt(0)],
+                [KeyCommandType.TeamCreate_10, 512 + "0".charCodeAt(0)],
+            ];
+            for (const [commandType, keyCode] of defaultBindings) {
                 this.addHotKey(commandType, keyCode);
             }
-            this.loadHotKeys(iniFile);
+            if (iniFile) {
+                this.loadHotKeys(iniFile);
+            }
         }
         this.addHotKey(KeyCommandType.Scoreboard, 9);
     }
