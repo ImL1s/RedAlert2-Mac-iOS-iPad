@@ -62,6 +62,8 @@ dependencies {
     implementation("androidx.webkit:webkit:1.10.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("androidx.annotation:annotation:1.7.1")
+    implementation("androidx.documentfile:documentfile:1.0.1")
 
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20231013")
 }

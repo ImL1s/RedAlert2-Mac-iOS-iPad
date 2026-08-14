@@ -17,7 +17,8 @@ import com.ammaar.ra2web.bridge.NativeBridge
 class WebViewHost @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
-    defStyleAttr: Int = 0
+    defStyleAttr: Int = 0,
+    private val safBridgeHandler: NativeBridge.SafBridgeHandler? = null
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
     private var webView: WebView? = null
@@ -79,7 +80,7 @@ class WebViewHost @JvmOverloads constructor(
             setOf(ALLOWED_ORIGIN)
         )
 
-        val nativeBridge = NativeBridge()
+        val nativeBridge = NativeBridge(safBridgeHandler)
         WebViewCompat.addWebMessageListener(
             webViewInstance,
             NativeBridge.OBJECT_NAME,
