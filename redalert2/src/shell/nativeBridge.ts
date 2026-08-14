@@ -21,6 +21,10 @@ export type ShellPlatform = 'ios' | 'android' | 'browser';
 export interface RA2ShellHost {
     platform: ShellPlatform;
     version: string;
+    isRecovery?: boolean;
+    crashCount?: number;
+    thermalState?: 'nominal' | 'fair' | 'serious' | 'critical' | string;
+    lowPowerMode?: boolean;
 }
 
 export interface SafStatusResponse {
@@ -92,7 +96,7 @@ export function isAndroidNativeShell(): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Android SAF Bridge Communication
+// Android Native Bridge Communication
 // ---------------------------------------------------------------------------
 
 let messageRequestId = 0;
@@ -159,4 +163,36 @@ export async function clearAndroidSafUri(): Promise<SafStatusResponse> {
         return { action: 'clearSafUri', status: 'ok', hasPermission: false };
     }
     return postAndroidBridgeMessage<SafStatusResponse>({ action: 'clearSafUri' });
+}
+
+/**
+ * Invokes the Android native bridge to retrieve a sanitized diagnostic bundle JSON.
+ */
+export async function getDiagnosticBundle(): Promise<any> {
+    if (!isAndroidNativeShell()) {
+        return null;
+    }
+    return postAndroidBridgeMessage({ action: 'getDiagnosticBundle' });
+}
+
+/**
+ * Invokes the Android native bridge to export and share the sanitized diagnostic ZIP.
+ */
+export async function shareDiagnosticBundle(): Promise<boolean> {
+    if (!isAndroidNativeShell()) {
+        return false;
+    }
+    const res = await postAndroidBridgeMessage<{ success?: boolean }>({ action: 'shareDiagnosticBundle' });
+    return res?.success ?? false;
+}
+
+/**
+ * Invokes the Android native bridge to clear cache and trigger reseed.
+ */
+export async function clearCacheAndReseed(): Promise<boolean> {
+    if (!isAndroidNativeShell()) {
+        return false;
+    }
+    const res = await postAndroidBridgeMessage<{ success?: boolean }>({ action: 'clearCacheAndReseed' });
+    return res?.success ?? false;
 }

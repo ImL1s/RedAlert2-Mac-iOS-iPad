@@ -1,5 +1,6 @@
 package com.ammaar.ra2web.bridge
 
+import android.content.Context
 import android.net.Uri
 import android.webkit.WebView
 import androidx.annotation.Keep
@@ -29,7 +30,7 @@ class NativeBridge(
     ) {
         val originStr = sourceOrigin.toString()
         val rawData = message.data ?: ""
-        processMessage(rawData, originStr) { replyMessage ->
+        processMessage(rawData, originStr, view.context) { replyMessage ->
             replyProxy.postMessage(replyMessage)
         }
     }
@@ -40,6 +41,7 @@ class NativeBridge(
     fun processMessage(
         rawData: String,
         originStr: String,
+        context: Context? = null,
         replyCallback: (String) -> Unit
     ) {
         if (!UrlSecurityValidator.isAllowedUrl(originStr)) {
@@ -48,10 +50,58 @@ class NativeBridge(
 
         try {
             val json = JSONObject(rawData)
-            val action = json.optString("action", "")
+            val action = json.optString("action", json.optString("command", ""))
             val id = json.optString("id", "")
 
             when (action) {
+                "getDiagnosticBundle" -> {
+                    if (context != null) {
+                        val diagManager = com.ammaar.ra2web.DiagnosticBundleManager(context)
+                        val diagJson = diagManager.generateBundleJson()
+                        replyCallback(diagJson)
+                    } else {
+                        val res = JSONObject().apply {
+                            put("action", "getDiagnosticBundle")
+                            put("status", "error")
+                            put("error", "Context unavailable")
+                            if (id.isNotEmpty()) put("id", id)
+                        }
+                        replyCallback(res.toString())
+                    }
+                }
+                "shareDiagnosticBundle" -> {
+                    if (context != null) {
+                        val diagManager = com.ammaar.ra2web.DiagnosticBundleManager(context)
+                        val success = diagManager.shareBundleZip()
+                        val res = JSONObject().apply {
+                            put("action", "shareDiagnosticBundle")
+                            put("success", success)
+                            if (id.isNotEmpty()) put("id", id)
+                        }
+                        replyCallback(res.toString())
+                    } else {
+                        val res = JSONObject().apply {
+                            put("action", "shareDiagnosticBundle")
+                            put("success", false)
+                            if (id.isNotEmpty()) put("id", id)
+                        }
+                        replyCallback(res.toString())
+                    }
+                }
+                "clearCacheAndReseed" -> {
+                    if (context != null) {
+                        try {
+                            context.cacheDir?.deleteRecursively()
+                            java.io.File(context.filesDir, "gameres").deleteRecursively()
+                        } catch (_: Exception) {}
+                    }
+                    val res = JSONObject().apply {
+                        put("action", "clearCacheAndReseed")
+                        put("success", true)
+                        if (id.isNotEmpty()) put("id", id)
+                    }
+                    replyCallback(res.toString())
+                }
                 "getSafStatus" -> {
                     val res = safBridgeHandler?.onGetSafStatus() ?: JSONObject().apply {
                         put("action", "getSafStatus")
@@ -114,6 +164,14 @@ class NativeBridge(
             }
             replyCallback(response.toString())
         }
+    }
+
+    fun processMessage(
+        rawData: String,
+        originStr: String,
+        replyCallback: (String) -> Unit
+    ) {
+        processMessage(rawData, originStr, null, replyCallback)
     }
 
     fun getPlatform(): String = "android"
