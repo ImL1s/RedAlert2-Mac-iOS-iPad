@@ -30,14 +30,25 @@ export class AudioSystem {
     private disposables = new CompositeDisposable();
     private soundsPlaying = new Set<AudioBufferSourceNode>();
     private musicState?: MusicState;
+    private masterVolumeScale: number = 1.0;
+
     constructor(mixer: Mixer) {
         this.mixer = mixer;
     }
     private handleVolumeChange = (channel: ChannelType, mixer: Mixer): void => {
-        this.getChannel(channel).gain.value = mixer.isMuted(channel)
-            ? 0
-            : mixer.getVolume(channel);
+        const base = mixer.isMuted(channel) ? 0 : mixer.getVolume(channel);
+        const scale = channel === ChannelType.Master ? this.masterVolumeScale : 1.0;
+        this.getChannel(channel).gain.value = base * scale;
     };
+
+    setMasterVolumeScale(scale: number): void {
+        this.masterVolumeScale = Math.max(0, Math.min(1, scale));
+        if (this.channels.has(ChannelType.Master)) {
+            const masterGain = this.getChannel(ChannelType.Master);
+            const baseVolume = this.mixer.isMuted(ChannelType.Master) ? 0 : this.mixer.getVolume(ChannelType.Master);
+            masterGain.gain.value = baseVolume * this.masterVolumeScale;
+        }
+    }
     isInitialized(): boolean {
         return !!this.audioContext;
     }
