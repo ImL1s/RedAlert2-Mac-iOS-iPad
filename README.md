@@ -1,9 +1,9 @@
-# Command & Conquer Red Alert 2 + Yuri's Revenge — iPhone & iPad
+# Command & Conquer Red Alert 2 + Yuri's Revenge — Android, iPhone & iPad
 
 <img width="800" height="450" alt="0808" src="https://github.com/user-attachments/assets/c8efcdb7-72c4-47b8-86a7-cecd25eb4ace" />
 
 
-**Red Alert 2 and Yuri's Revenge skirmish running natively on iPhone and
+**Red Alert 2 and Yuri's Revenge skirmish running natively on Android, iPhone, and
 iPad** — fully in English, with touch controls built for RTS (tap-select,
 drag-box, two-finger map grab, pinch zoom, long-press force-attack),
 mid-match save/load, retail-accurate lighting, and skirmish AI built out on top of Supalosa's
@@ -13,8 +13,8 @@ fired like the original AI fired them, spies, garrisons, terror drones, and a ro
 
 No emulation, and no rewrite either: this is the real Chrono Divide-lineage
 TypeScript engine, with its core simulation loop and determinism model left
-alone and the changes additive, wrapped in a native Swift shell. Rendering flows WebGL → ANGLE → Metal via WebKit; your retail game
-assets ship inside the app bundle and never touch the network.
+alone and the changes additive, wrapped in native Kotlin/WebView and Swift/WKWebView shells. Rendering flows WebGL → ANGLE/GLES/Metal; your retail game
+assets ship inside the app bundle (iOS) or load dynamically via Storage Access Framework (Android) and never touch the network.
 
 **No game assets are included or distributed.** You need your own copy of
 Red Alert 2 + Yuri's Revenge ([Steam](https://store.steampowered.com/app/2229850/),
@@ -29,8 +29,11 @@ your install:
 
 Red Alert 2 & Yuri's Revenge is supported on Android devices (API 29+ / Android 10+):
 
-- **Native Kotlin Shell**: Full-screen edge-to-edge Android `WebView` container (`android/`) with memory-bounded chunk streaming.
-- **Zero Retail Asset Distribution**: All proprietary game resources are loaded dynamically from user-owned resource packs via Android Storage Access Framework (SAF).
+- **Native Kotlin Shell (API 29+)**: High-performance, sensor landscape full-screen edge-to-edge Android `WebView` container (`android/`) with memory-bounded chunk streaming and fail-closed security invariants.
+- **Storage Access Framework (SAF) Dynamic Resource Loading**: Onboards and streams user-owned retail game assets dynamically via SAF document trees (`/sdcard/Download/...`) with cryptographic SHA-256 validation into Origin Private File System (OPFS).
+- **RTS Touch & Desktop Controls**: Native multi-touch gesture pipeline (single-tap selection, bounding-box drag, two-finger pan, pinch zoom, long-press force attack) alongside full Samsung DeX desktop mode and hardware keyboard/mouse input support.
+- **Android Thermal & Power Throttling**: Real-time integration with Android `PowerManager` thermal status listeners (`OnThermalStatusChangedListener`) dynamically adapting rendering workload without breaking deterministic simulation ticks.
+- **Zero Retail Asset Distribution & Release Gate**: Zero proprietary game assets are bundled or distributed. Public and CI builds enforce the strict legal release gate (`PUBLIC_RELEASE_BLOCKED = true`).
 - **Architecture & Guides**:
   - [Android Overview](docs/android/README.md)
   - [Developer Setup Guide](docs/android/SETUP.md)
@@ -61,13 +64,13 @@ by the RA2WEB community. So the Generals playbook still applies — *preserve
 the battle-tested engine, swap the platform underneath it* — but the
 translation layer is different:
 
-| Generals port | This port |
+| Generals port | This port (iOS & Android) |
 |---|---|
 | Real 2003 C++ engine, untouched | Real Chrono Divide-lineage TS engine, untouched where it counts |
-| DX8 → DXVK → Vulkan → MoltenVK → Metal | WebGL → ANGLE → Metal (Apple ships this in WebKit, JIT included) |
-| Filesystem rerouted into the bundle | Assets bundled + first-launch seed into origin storage, self-healing |
-| SDL touch → RTS touch semantics | Custom gesture engine → the engine's pointer layer |
-| "iOS owns your process" lifecycle work | Same, via the shell owning the WebView lifecycle |
+| DX8 → DXVK → Vulkan → MoltenVK → Metal | WebGL → ANGLE → Metal / GLES (via WebKit / Android System WebView) |
+| Filesystem rerouted into the bundle | Assets bundled (iOS) / SAF dynamic import (Android) into origin storage |
+| SDL touch → RTS touch semantics | Custom gesture engine → pointer layer + DeX/HW mouse support |
+| "iOS owns your process" lifecycle work | Native shell lifecycle + Android Thermal/PowerManager integration |
 
 And where the Generals engine came with its AI, its lighting, and its
 expansion content built in, here each of those became its own campaign —
@@ -245,24 +248,26 @@ of the Yuri AIs just made like 20 bio reactors"* and owned every decision.
 
 ## Quick start
 
-Prerequisites (one time):
+### Prerequisites (one time):
+
+- **Web Engine & Tools**: `curl -fsSL https://bun.sh/install | bash`, `ffmpeg`
+- **iOS Builds (macOS only)**: Xcode, `xcode-select --install`, `brew install xcodegen`
+- **Android Builds**: JDK 21 (`export JAVA_HOME=...`), Android SDK (API 29+, Build Tools 34.0.0+)
+
+### Clone and Asset Extraction:
+
+Clone and run the setup script against your own retail install:
 
 ```sh
-xcode-select --install                  # plus full Xcode for device builds
-brew install xcodegen ffmpeg
-curl -fsSL https://bun.sh/install | bash
-```
-
-Clone and run the setup script against your own install:
-
-```sh
-git clone <this-repo> ra2-ios && cd ra2-ios
+git clone <this-repo> ra2-port && cd ra2-port
 ./scripts/setup.sh "/path/to/steamapps/common/Command & Conquer Red Alert 2"
 ```
 
 The script installs dependencies, verifies your retail files, imports and
 converts the assets (nothing is downloaded — everything comes from your
-copy), and tells you what to run next:
+copy), and tells you what to run next.
+
+### iOS Build
 
 ```sh
 ./scripts/build-ios.sh                  # build + iPhone simulator
@@ -272,11 +277,28 @@ RA2_TEAM_ID=<your-team-id> ./scripts/build-ios.sh --device   # iPhone/iPad
 Find your team id in Xcode → Settings → Accounts. Install the device build
 with `xcrun devicectl device install app --device <id> <path to RA2.app>`.
 
-Desktop development (no Xcode needed):
+### Android Build
+
+```sh
+# 1. Compile web engine and stage assets to Android shell
+cd redalert2 && bun install && npx vite build && cd ..
+mkdir -p android/app/src/main/assets/WebDist
+cp -R redalert2/dist/* android/app/src/main/assets/WebDist/
+
+# 2. Build debug APK (Zero retail assets included)
+cd android && ./gradlew assemblePublicCiDebug && cd ..
+
+# 3. Install on connected Android device / emulator
+adb install android/app/build/outputs/apk/publicCi/debug/app-publicCi-debug.apk
+```
+
+*Note on Android Game Assets*: Push your extracted `gameres-export/` to `/sdcard/Download/RA2_GameRes` using `adb push gameres-export /sdcard/Download/RA2_GameRes`. Select the folder via SAF when launching the app.
+
+### Desktop Development (no Xcode / Android Studio needed):
 
 ```sh
 cd redalert2 && RA2_HTTP=1 bun run dev
-# open http://localhost:4000/?shell=1  ← exercises the exact iOS boot path
+# open http://localhost:4000/?shell=1  ← exercises the exact shell boot path
 ```
 
 ## Where things are
@@ -291,6 +313,8 @@ cd redalert2 && RA2_HTTP=1 bun run dev
 | `redalert2/src/game/ai/.../logic/superweapons.ts` | The superweapon officer (targeting, timing, anti-SW Force Shield) |
 | `redalert2/src/gui/screen/mainMenu/loadGame/` | Mid-match save/load (replay-backed) |
 | `ios/` | XcodeGen project: Swift shell, WKWebView, bundle scheme handler |
+| `android/` | Gradle project: Kotlin shell, AndroidX WebView, SAF dynamic loader, thermal monitoring |
+| `docs/android/` | Android architecture, setup, build, troubleshooting, and licensing documentation |
 | `scripts/setup.sh` | One-shot setup: deps + retail import + next steps |
 | `scripts/prepare-gameres.ts` | The asset importer (what `setup.sh` runs for you) |
 | `scripts/build-ios.sh` | Web build → asset staging → xcodegen → xcodebuild |
@@ -311,14 +335,9 @@ diff -rq /tmp/upstream/src redalert2/src | wc -l
 | `redalert2/**` (engine, 1,300 files) | ~127,000 | Chrono Divide → RA2WEB → [huangkaoya/redalert2](https://github.com/huangkaoya/redalert2) @ `8c07f10` |
 | `redalert2/src/game/ai/thirdpartbot/**` | 7,367 upstream + ~4,400 here | [Supalosa's bot](https://github.com/Supalosa/supalosa-chronodivide-bot) — **no licence declared**, see Licence |
 | `ios/**` (Swift shell) | 444 lines of Swift | this repo |
+| `android/**` (Kotlin shell) | ~2,000 lines of Kotlin | this repo |
 | `scripts/**` (import, build, probes) | ~2,600 | this repo |
-
-Most of the port work is not in those two directories. Roughly 9,800 of the
-insertions land *inside* `redalert2/**` — Yuri's Revenge, the lighting fixes,
-touch controls and the AI all modify the engine tree rather than sitting beside
-it. The row above assigns that tree to upstream because upstream wrote the
-127,000 lines it started from, not because nothing was added to it.
-| `docs/`, `README` | ~1,200 | this repo |
+| `docs/`, `README` | ~2,500 | this repo |
 
 On the English: the in-game strings are not translated by anyone here — they
 are extracted verbatim from the retail English `language.mix` by
@@ -350,7 +369,9 @@ Two related gaps, stated rather than buried:
 
 **No built binary is distributed here, and none will be.** GPL-3.0 §6's
 Installation Information requirement cannot be satisfied under iOS code signing,
-so this ships as source you build with your own signing identity.
+and upstream copyright provenance requires a strict fail-closed release gate
+(`PUBLIC_RELEASE_BLOCKED = true` — see [LICENSING_AND_PROVENANCE.md](docs/android/LICENSING_AND_PROVENANCE.md)).
+This software ships as source code for personal, educational, and research use.
 
 Per EA's [C&C modding guidelines](https://www.ea.com/games/command-and-conquer/command-and-conquer-remastered/news/modding-faq),
 this project is free, non-commercial, and carries their required notice:

@@ -51,7 +51,7 @@ adb install app/build/outputs/apk/publicCi/debug/app-publicCi-debug.apk
                       +--------------------+---------------------+
                                            |
                                 Local Scheme Router
-                           https://appassets.androidlocal/
+                      https://appassets.androidplatform.net/
                                            |
                       +--------------------v---------------------+
                       |        TypeScript Web Game Engine        |
