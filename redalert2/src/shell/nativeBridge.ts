@@ -21,10 +21,26 @@ export interface RA2ShellHost {
     version: string;
 }
 
+export interface SafStatusResponse {
+    action: string;
+    status: 'ok' | 'error' | 'cancelled';
+    hasPermission: boolean;
+    uri?: string | null;
+    error?: string;
+    id?: string;
+}
+
+export interface AndroidNativeBridgeListener {
+    postMessage(message: string): void;
+    onmessage?: (event: { data: string }) => void;
+}
+
 declare global {
     interface Window {
         /** Set by native shells to identify themselves at injection time. */
         __RA2_SHELL__?: RA2ShellHost;
+        /** Injected by Android WebViewCompat addWebMessageListener. */
+        ra2NativeBridge?: AndroidNativeBridgeListener;
     }
 }
 
@@ -71,4 +87,74 @@ export function isIOSNativeShell(): boolean {
 /** True when running inside the Android WebView shell. */
 export function isAndroidNativeShell(): boolean {
     return getShellPlatform() === 'android';
+}
+
+// ---------------------------------------------------------------------------
+// Android SAF Bridge Communication
+// ---------------------------------------------------------------------------
+
+let messageRequestId = 0;
+
+/**
+ * Sends a message to the Android native bridge and awaits a response.
+ */
+export function postAndroidBridgeMessage<T = unknown>(payload: Record<string, unknown>): Promise<T> {
+    return new Promise((resolve, reject) => {
+        if (!window.ra2NativeBridge || typeof window.ra2NativeBridge.postMessage !== 'function') {
+            reject(new Error('Android native bridge is not available'));
+            return;
+        }
+
+        const id = `req_${++messageRequestId}_${Date.now()}`;
+        const requestPayload = { ...payload, id };
+
+        const previousOnMessage = window.ra2NativeBridge.onmessage;
+        const handler = (event: { data: string }) => {
+            try {
+                const parsed = JSON.parse(event.data);
+                if (parsed.id === id || (!parsed.id && parsed.action === payload.action)) {
+                    resolve(parsed as T);
+                    return;
+                }
+            } catch (err) {
+                // Not JSON or unmatched
+            }
+            if (previousOnMessage) {
+                previousOnMessage(event);
+            }
+        };
+
+        window.ra2NativeBridge.onmessage = handler;
+        window.ra2NativeBridge.postMessage(JSON.stringify(requestPayload));
+    });
+}
+
+/**
+ * Queries Android SAF persisted permission status.
+ */
+export async function getAndroidSafStatus(): Promise<SafStatusResponse> {
+    if (!isAndroidNativeShell()) {
+        return { action: 'getSafStatus', status: 'ok', hasPermission: false, uri: null };
+    }
+    return postAndroidBridgeMessage<SafStatusResponse>({ action: 'getSafStatus' });
+}
+
+/**
+ * Requests the Android native SAF folder picker.
+ */
+export async function requestAndroidSafPick(): Promise<SafStatusResponse> {
+    if (!isAndroidNativeShell()) {
+        throw new Error('SAF folder picker is only available in Android native shell');
+    }
+    return postAndroidBridgeMessage<SafStatusResponse>({ action: 'requestSafPick' });
+}
+
+/**
+ * Clears the persisted Android SAF resource pack URI.
+ */
+export async function clearAndroidSafUri(): Promise<SafStatusResponse> {
+    if (!isAndroidNativeShell()) {
+        return { action: 'clearSafUri', status: 'ok', hasPermission: false };
+    }
+    return postAndroidBridgeMessage<SafStatusResponse>({ action: 'clearSafUri' });
 }
