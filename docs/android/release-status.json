@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "version": "1.0.0",
+  "project": "RedAlert2-Android",
+  "epic": "#1",
+  "publicReleaseBlocked": true,
+  "status": "DEVELOPMENT_PRIVATE_TESTING_ONLY",
+  "lastAuditDate": "2026-08-14",
+  "unblockingCriteria": {
+    "legal": {
+      "chronoDivideLicenseVerification": "UNRESOLVED - Requires formal written confirmation or explicit open-source relicensing from Alexandru Ciucă / Chrono Divide team.",
+      "supalosaBotLicenseGrant": "UNRESOLVED - Requires explicit license grant (e.g. MIT/Apache-2.0/GPL-3.0) replacing UNLICENSED upstream status.",
+      "eaTrademarkAndIpCompliance": "UNRESOLVED - Must maintain clear non-affiliation disclaimers and ensure zero retail proprietary assets (.mix, .csf, .bik, .wav) are bundled in public channels."
+    },
+    "technical": {
+      "zeroRetailAssetLeakage": "PASSED - Enforced via scripts/verify-no-retail-assets.sh and CI static scanners.",
+      "failClosedManifestVerification": "REQUIRED - Complete ADR FC-1 through FC-6 invariant verification in Android Kotlin shell.",
+      "safUserPackOnboarding": "REQUIRED - Complete Storage Access Framework onboarding without broad storage permissions."
+    }
+  },
+  "distributionTiers": {
+    "sourceCode": {
+      "eligible": true,
+      "conditions": "Open-source research and educational use under individual component licenses. Zero retail assets in git."
+    },
+    "privateSideloadApk": {
+      "eligible": true,
+      "conditions": "Developer local testing, private smoke probe, user-seeded game resources only. No public hosting."
+    },
+    "noRetailPublicShell": {
+      "eligible": false,
+      "blockerReason": "Requires resolution of upstream engine copyright/licensing chain (Chrono Divide / Supalosa)."
+    },
+    "appStoreDistribution": {
+      "eligible": false,
+      "blockerReason": "Permanently blocked due to EA trademarks and unverified copyright grants."
+    }
+  },
+  "componentInventory": [
+    {
+      "name": "Android Kotlin Shell",
+      "path": "android/",
+      "license": "GPL-3.0-or-later",
+      "provenance": "Original development for RedAlert2-Mac-iOS-iPad project"
+    },
+    {
+      "name": "Red Alert 2 Engine",
+      "path": "redalert2/",
+      "license": "GPL-3.0 (Unverified grant from Chrono Divide / Alexandru Ciucă via huangkaoya/redalert2)",
+      "provenance": "Vendored at commit 8c07f10 from huangkaoya/redalert2"
+    },
+    {
+      "name": "Skirmish AI",
+      "path": "redalert2/src/game/ai/thirdpartbot/",
+      "license": "UNLICENSED",
+      "provenance": "Derived from Supalosa's Chrono Divide bot"
+    },
+    {
+      "name": "7-Zip WebAssembly",
+      "path": "redalert2/public/7zz.wasm",
+      "license": "LGPL-2.1-or-later (with unRAR restriction)",
+      "provenance": "Igor Pavlov (7-Zip)"
+    },
+    {
+      "name": "Fira Sans Font",
+      "path": "redalert2/public/res/fonts/",
+      "license": "OFL-1.1",
+      "provenance": "Mozilla Corporation & Telefonica S.A."
+    },
+    {
+      "name": "js-fileexplorer",
+      "path": "redalert2/public/other/",
+      "license": "MIT or LGPL",
+      "provenance": "CubicleSoft"
+    }
+  ]
+}
