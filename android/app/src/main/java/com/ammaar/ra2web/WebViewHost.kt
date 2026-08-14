@@ -157,6 +157,10 @@ class WebViewHost @JvmOverloads constructor(
         }
     }
 
+    fun evaluateJavascript(script: String, resultCallback: ((String?) -> Unit)? = null) {
+        webView?.evaluateJavascript(script, resultCallback)
+    }
+
     fun onDestroy() {
         webView?.let {
             (it.parent as? ViewGroup)?.removeView(it)
