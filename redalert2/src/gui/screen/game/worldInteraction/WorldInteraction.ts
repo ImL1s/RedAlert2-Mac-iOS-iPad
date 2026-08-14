@@ -25,13 +25,14 @@ export class WorldInteraction {
     private lastKeyMods?: KeyboardEvent;
     private hasFaultyCtrlLeftClick = false;
     public chatTypingHandler?: any;
-    constructor(private readonly worldScene: any, private readonly pointer: any, private readonly pointerEvents: any, private readonly cameraPanHandler: any, private readonly mapScrollHandler: any, private readonly mapHoverHandler: any, private readonly tooltipHandler: any, public readonly entityIntersectHelper: any, public readonly unitSelectionHandler: any, public readonly defaultActionHandler: any, public readonly keyboardHandler: any, public readonly arrowScrollHandler: any, public readonly customScrollHandler: any, public readonly minimapHandler: any, private readonly cameraZoom: any, private readonly document: Document, private readonly renderer: any, public readonly targetLines: any, private readonly rightClickMove: any, private readonly rightClickScroll: any, private readonly battleControlApi: any) { }
+    constructor(private readonly worldScene: any, private readonly pointer: any, private readonly pointerEvents: any, private readonly cameraPanHandler: any, private readonly mapScrollHandler: any, private readonly mapHoverHandler: any, private readonly tooltipHandler: any, public readonly entityIntersectHelper: any, public readonly unitSelectionHandler: any, public readonly defaultActionHandler: any, public readonly keyboardHandler: any, public readonly arrowScrollHandler: any, public readonly customScrollHandler: any, public readonly minimapHandler: any, private readonly cameraZoom: any, private readonly document: Document, private readonly renderer: any, public readonly targetLines: any, private readonly rightClickMove: any, private readonly rightClickScroll: any, private readonly battleControlApi: any, public readonly gamepadHandler?: any) { }
     init(): void {
         if (this.initialized) {
             return;
         }
         this.setupHandlers();
         this.worldScene.add(this.targetLines);
+        this.gamepadHandler?.init?.();
         this.initialized = true;
         this.hasFaultyCtrlLeftClick = isMacFirefox();
         this.battleControlApi?._setWorldInteraction(this);
@@ -93,6 +94,7 @@ export class WorldInteraction {
         this.unitSelectionHandler.dispose();
         this.chatTypingHandler?.dispose?.();
         this.keyboardHandler.dispose();
+        this.gamepadHandler?.dispose?.();
         this.worldScene.remove(this.targetLines);
         this.targetLines.dispose?.();
         this.tooltipHandler.dispose();
@@ -104,6 +106,7 @@ export class WorldInteraction {
         this.enabled = enabled;
         if (enabled) {
             this.setupHandlers();
+            this.gamepadHandler?.setEnabled?.(true);
         }
         else {
             this.teardownHandlers();
@@ -111,6 +114,7 @@ export class WorldInteraction {
             this.cancelKeyUp();
             this.pointer.setPointerType(PointerType.Default);
             this.chatTypingHandler?.endTyping?.();
+            this.gamepadHandler?.setEnabled?.(false);
         }
         this.battleControlApi?._setWorldInteraction(enabled ? this : undefined);
         this.battleControlApi?._notifyToggle(enabled);

@@ -15,6 +15,7 @@ import { MinimapHandler } from './MinimapHandler';
 import { UnitSelectionHandler } from './UnitSelectionHandler';
 import { WorldInteraction } from './WorldInteraction';
 import { KeyboardHandler } from './keyboard/KeyboardHandler';
+import { GamepadHandler } from './gamepad/GamepadHandler';
 export class WorldInteractionFactory {
     constructor(private localPlayer: any, private game: any, private unitSelection: any, private renderableManager: any, private uiScene: any, private worldScene: any, private pointer: any, private renderer: any, private keyBinds: any, private generalOptions: any, private freeCamera: any, private debugPaths: any, private devMode: boolean, private document: Document, private minimap: any, private strings: any, private textColor: string, private debugText: any, private battleControlApi: any) { }
     create(): any {
@@ -37,7 +38,9 @@ export class WorldInteractionFactory {
         const customScrollHandler = new CustomScrollHandler(mapScrollHandler);
         const minimapHandler = new MinimapHandler(this.minimap, map, shroud, worldScene, new MapPanningHelper(map));
         const targetLines = new TargetLines(this.localPlayer, this.unitSelection, worldScene.camera, this.debugPaths, this.generalOptions.targetLines);
-        const worldInteraction = new WorldInteraction(worldScene, pointer, pointer.pointerEvents, new CameraPanHandler(worldScene.cameraPan, pointer, this.generalOptions.scrollRate, this.freeCamera, worldScene), mapScrollHandler, mapHoverHandler, tooltipHandler, entityIntersectHelper, unitSelectionHandler, defaultActionHandler, keyboardHandler, arrowScrollHandler, customScrollHandler, minimapHandler, worldScene.cameraZoom, this.document, renderer, targetLines, this.generalOptions.rightClickMove, this.generalOptions.rightClickScroll, this.battleControlApi);
+        const cameraPanHandler = new CameraPanHandler(worldScene.cameraPan, pointer, this.generalOptions.scrollRate, this.freeCamera, worldScene);
+        const gamepadHandler = new GamepadHandler(worldScene, cameraPanHandler, worldScene.cameraZoom, keyboardHandler, unitSelectionHandler);
+        const worldInteraction = new WorldInteraction(worldScene, pointer, pointer.pointerEvents, cameraPanHandler, mapScrollHandler, mapHoverHandler, tooltipHandler, entityIntersectHelper, unitSelectionHandler, defaultActionHandler, keyboardHandler, arrowScrollHandler, customScrollHandler, minimapHandler, worldScene.cameraZoom, this.document, renderer, targetLines, this.generalOptions.rightClickMove, this.generalOptions.rightClickScroll, this.battleControlApi, gamepadHandler);
         const debugRoot = ((window as any).__ra2debug ??= {});
         debugRoot.entityIntersectHelper = entityIntersectHelper;
         debugRoot.mapTileIntersectHelper = mapTileIntersectHelper;
