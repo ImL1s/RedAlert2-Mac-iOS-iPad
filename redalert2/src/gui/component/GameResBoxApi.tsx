@@ -6,6 +6,7 @@ import { GameResForm, type GameResFormProps } from './GameResForm';
 import { FileSystemUtil } from '../../engine/gameRes/FileSystemUtil';
 import type { Viewport } from '../Viewport';
 import type { Strings } from '../../data/Strings';
+import { isAndroidNativeShell, requestAndroidSafPick } from '../../shell/nativeBridge';
 interface FsAccessLibraryShim {
     polyfillDataTransferItem: () => Promise<void>;
     showDirectoryPicker: (options?: any) => Promise<FileSystemDirectoryHandle>;
@@ -56,6 +57,14 @@ export class GameResBoxApi {
                     onBrowseFolder: async () => {
                         console.log('[GameResBoxApi] onBrowseFolder called');
                         try {
+                            if (isAndroidNativeShell()) {
+                                const result = await requestAndroidSafPick();
+                                console.log('[GameResBoxApi] Android SAF pick result:', result);
+                                if (result.status === 'ok' && result.hasPermission) {
+                                    window.location.reload();
+                                    return;
+                                }
+                            }
                             const handle = await this.fsAccessLib.showDirectoryPicker({ _preferPolyfill: true });
                             handleResolve(handle);
                         }

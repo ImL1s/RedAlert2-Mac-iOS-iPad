@@ -21,7 +21,9 @@ export const GameResForm: React.FC<GameResFormProps> = ({ closable, strings, def
         }
     }, [dragTarget]);
     useEffect(() => {
-        urlInputRef.current?.focus();
+        if (!window.matchMedia?.('(pointer: coarse)')?.matches) {
+            urlInputRef.current?.focus();
+        }
     }, []);
     useEffect(() => {
         const preventDefault = (event: Event) => event.preventDefault();

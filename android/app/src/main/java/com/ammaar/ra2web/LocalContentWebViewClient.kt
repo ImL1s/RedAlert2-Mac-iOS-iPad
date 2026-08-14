@@ -88,6 +88,18 @@ open class LocalContentWebViewClient @JvmOverloads constructor(
             return assetResponse
         }
 
+        // Direct assets fallback for non-standard file extensions (e.g. .ini, .json)
+        val cleanAssetPath = path.removePrefix("/").substringBefore('?').substringBefore('#')
+        if (cleanAssetPath.isNotEmpty()) {
+            try {
+                val stream = context.assets.open(cleanAssetPath)
+                val mime = getMimeType(cleanAssetPath)
+                return create200Response(mime, BufferedInputStream(stream, BUFFER_SIZE_BYTES))
+            } catch (_: Exception) {
+                // Not found in bundled assets
+            }
+        }
+
         return create404Response()
     }
 
@@ -205,6 +217,7 @@ open class LocalContentWebViewClient @JvmOverloads constructor(
             "js", "mjs" -> "text/javascript"
             "css" -> "text/css"
             "json" -> "application/json"
+            "ini", "txt" -> "text/plain"
             "wasm" -> "application/wasm"
             "png" -> "image/png"
             "jpg", "jpeg" -> "image/jpeg"
