@@ -35,8 +35,8 @@ done
 # text, and it does so silently — the app looks fine until you read it. Fail
 # here instead of shipping that.
 for csf in general.csf generalmd.csf; do
-  if [ ! -s "redalert2/public/$csf" ]; then
-    printf '\033[31merror:\033[0m redalert2/public/%s is missing.\n' "$csf" >&2
+  if [ ! -s "gameres-export/$csf" ]; then
+    printf '\033[31merror:\033[0m gameres-export/%s is missing.\n' "$csf" >&2
     echo "  The UI would render raw label keys instead of English text." >&2
     echo "  Run ./scripts/setup.sh \"/path/to/your/ra2/install\" first." >&2
     exit 1
@@ -99,9 +99,9 @@ if [[ "$VARIANT" == "ra2" ]]; then
   rm -f "$IOS/Resources/GameRes"/*.yro
 fi
 
-echo "==> Generating GameRes manifest"
+echo "==> Generating GameRes manifest (v2)"
 python3 - "$IOS/Resources/GameRes" <<'EOF'
-import json, os, sys
+import hashlib, json, os, sys
 root = sys.argv[1]
 files = []
 for dirpath, _, names in os.walk(root):
@@ -110,10 +110,12 @@ for dirpath, _, names in os.walk(root):
             continue
         full = os.path.join(dirpath, name)
         rel = os.path.relpath(full, root)
-        files.append({"path": rel.replace(os.sep, "/"), "size": os.path.getsize(full)})
+        with open(full, 'rb') as f:
+            h = hashlib.sha256(f.read()).hexdigest()
+        files.append({"path": rel.replace(os.sep, "/"), "size": os.path.getsize(full), "sha256": h})
 with open(os.path.join(root, "manifest.json"), "w") as f:
-    json.dump({"files": files}, f, indent=1)
-print(f"manifest: {len(files)} files, {sum(f['size'] for f in files)/1048576:.1f} MB")
+    json.dump({"version": 2, "files": files}, f, indent=1)
+print(f"manifest v2: {len(files)} files, {sum(f['size'] for f in files)/1048576:.1f} MB")
 EOF
 
 echo "==> Generating Xcode project"
