@@ -4,12 +4,12 @@
 - **Date**: 2026-08-12
 - **Author**: ImL1s (via automated port analysis)
 - **Baseline Git Commit SHA**: `991945d60a7139d3c4c438326abb6d3c093b2497`
-- **Parent Epic**: [#1 — Android v0.1](https://github.com/ImL1s/RedAlert2-Mac-iOS-iPad/issues/1)
+- **Parent Epic**: [#1 — Android v0.1](https://github.com/ImL1s/RedAlert2-Android-iOS-iPad/issues/1)
 - **Scope**: Architecture contracts and system boundaries for Android v0.1
 
 > **PUBLIC_RELEASE_BLOCKED = true**
 > This ADR documents the *target* architecture. No implementation exists yet.
-> Public release remains blocked until [issue #2](https://github.com/ImL1s/RedAlert2-Mac-iOS-iPad/issues/2)
+> Public release remains blocked until [issue #2](https://github.com/ImL1s/RedAlert2-Android-iOS-iPad/issues/2)
 > (licensing, provenance, and public-distribution gate) reaches an evidence-backed
 > release-eligible disposition **AND** every required engineering and release gate
 > passes. Closing all technical P0 issues alone does not promote public-release
@@ -19,7 +19,7 @@
 
 ## 1. Context & Problem Statement
 
-The `RedAlert2-Mac-iOS-iPad` project ports the Chronodivide-lineage Red Alert 2 /
+The `RedAlert2-Android-iOS-iPad` project ports the Chronodivide-lineage Red Alert 2 /
 Yuri's Revenge TypeScript simulation engine to native mobile platforms. Following
 the successful iOS port (detailed in `docs/PORTING_PLAYBOOK.md`), the goal of
 Android v0.1 is to bootstrap a secure native Android application using Kotlin and
@@ -41,7 +41,7 @@ WebGL renderer. Bridging this web engine to Android requires:
 
 ### Upstream Relationship
 
-This repository (`ImL1s/RedAlert2-Mac-iOS-iPad`) is a fork of
+This repository (`ImL1s/RedAlert2-Android-iOS-iPad`) is a fork of
 [`ammaarreshi/RedAlert2-Mac-iOS-iPad`](https://github.com/ammaarreshi/RedAlert2-Mac-iOS-iPad).
 The upstream contains the iOS port. Android work MUST NOT break upstream iOS
 behavior. Periodic sync with upstream is expected via merge (not rebase) to
@@ -103,7 +103,7 @@ preserve commit history.
 
 Performance tiers and budgets (FPS targets, memory limits, streaming thresholds,
 thermal policies) are **TBD**. They will be measured on real devices and recorded
-in issue [#17](https://github.com/ImL1s/RedAlert2-Mac-iOS-iPad/issues/17).
+in issue [#17](https://github.com/ImL1s/RedAlert2-Android-iOS-iPad/issues/17).
 
 ---
 

@@ -1,6 +1,6 @@
 # Research Report #022: Native Android VFS Backend vs. OPFS Duplication
 
-**Project**: RedAlert2 Android Port (`ImL1s/RedAlert2-Mac-iOS-iPad`)  
+**Project**: RedAlert2 Android Port (`ImL1s/RedAlert2-Android-iOS-iPad`)  
 **Document ID**: RR-022-VFS  
 **Status**: Completed / Evaluated (Post-v0.1 Candidate)  
 **Date**: 2026-08-14  

@@ -1,7 +1,7 @@
 # Android Local-Only Embedded Technical Probe
 
 - **Status**: Documented & Available for Local Testing
-- **Tracking Issue**: [#6 — Local-Only Embedded-Resource Android Technical Probe](https://github.com/ImL1s/RedAlert2-Mac-iOS-iPad/issues/6)
+- **Tracking Issue**: [#6 — Local-Only Embedded-Resource Android Technical Probe](https://github.com/ImL1s/RedAlert2-Android-iOS-iPad/issues/6)
 - **Flavor Dimension**: `privateSmoke` (`android/app/build.gradle.kts`)
 - **Execution Script**: `scripts/private-smoke-probe.sh`
 

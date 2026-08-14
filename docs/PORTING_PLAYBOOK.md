@@ -851,7 +851,7 @@ derived from retail files. Nothing it produces is committed to the repo.
 ## Appendix: Android port
 
 The Android port is tracked under
-[Epic #1](https://github.com/ImL1s/RedAlert2-Mac-iOS-iPad/issues/1).
+[Epic #1](https://github.com/ImL1s/RedAlert2-Android-iOS-iPad/issues/1).
 Architecture decisions and system boundaries are documented in
 [ADR-001](adr/001-android-architecture.md) (status: **Proposed**).
 

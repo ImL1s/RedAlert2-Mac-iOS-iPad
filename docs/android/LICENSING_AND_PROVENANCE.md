@@ -2,7 +2,7 @@
 
 - **Document Version**: 1.0.0
 - **Status**: Enforced
-- **Tracking Issue**: [#2 — Licensing, Provenance, and Distribution Gate](https://github.com/ImL1s/RedAlert2-Mac-iOS-iPad/issues/2)
+- **Tracking Issue**: [#2 — Licensing, Provenance, and Distribution Gate](https://github.com/ImL1s/RedAlert2-Android-iOS-iPad/issues/2)
 - **ADR Reference**: `docs/adr/001-android-architecture.md` (ADR-001)
 - **Machine-Readable Gate**: `docs/android/release-status.json` (`PUBLIC_RELEASE_BLOCKED = true`)
 
@@ -32,7 +32,7 @@ This document establishes the legal provenance framework, component licensing bo
 The Android port incorporates software components from distinct sources with varying licensing terms:
 
 ### 2.1 Android Kotlin Shell (`android/`)
-- **Origin**: Created specifically for this project (`ImL1s/RedAlert2-Mac-iOS-iPad`).
+- **Origin**: Created specifically for this project (`ImL1s/RedAlert2-Android-iOS-iPad`).
 - **License**: **GPL-3.0-or-later**.
 - **Dependencies**: Standard AndroidX libraries (`androidx.webkit`, `androidx.activity`, `androidx.documentfile`, `androidx.lifecycle`) governed by Apache 2.0.
 - **Provenance**: Authored by repository contributors.
