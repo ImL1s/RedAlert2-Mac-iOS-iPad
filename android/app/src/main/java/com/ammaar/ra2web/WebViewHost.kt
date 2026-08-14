@@ -30,7 +30,7 @@ class WebViewHost @JvmOverloads constructor(
 
     companion object {
         const val DOMAIN = "appassets.androidplatform.net"
-        const val BASE_URL = "https://$DOMAIN/WebDist/index.html"
+        const val BASE_URL = "https://$DOMAIN/index.html"
         const val ALLOWED_ORIGIN = "https://$DOMAIN"
     }
 

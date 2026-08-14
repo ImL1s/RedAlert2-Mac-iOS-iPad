@@ -2,10 +2,21 @@
 # Produced by scripts/prepare-gameres.ts from a legally-owned RA2 install.
 *.mix
 *.csf
+*.exe
+*.EXE
 gameres-export/
 ios/Resources/GameRes/
 ios/Resources/WebDist/
 android/app/src/main/assets/WebDist/
+android/app/src/main/assets/7zz.wasm
+android/app/src/main/assets/assets/
+android/app/src/main/assets/config.ini
+android/app/src/main/assets/css/
+android/app/src/main/assets/index.html
+android/app/src/main/assets/mods.ini
+android/app/src/main/assets/other/
+android/app/src/main/assets/res/
+android/app/src/main/assets/servers.ini
 redalert2/public/local-pack/
 redalert2/public/general.csf
 redalert2/public/generalmd.csf

@@ -105,6 +105,10 @@ export async function runOpfsSeeder(
 ): Promise<number> {
     const manifestResponse = await fetch('/gameres/manifest.json');
     if (!manifestResponse.ok) {
+        if (manifestResponse.status === 404) {
+            console.log('[opfsSeeder] No shell seed manifest found (/gameres/manifest.json 404), skipping OPFS seeding.');
+            return 0;
+        }
         throw new Error(`Shell seed manifest missing (${manifestResponse.status})`);
     }
     const rawManifest = await manifestResponse.json();
@@ -367,6 +371,8 @@ export async function seedGameResFromShell(): Promise<void> {
             overlay ??= createSeedOverlay();
             overlay.setText(text);
         });
+    } catch (e) {
+        console.warn('[opfsSeeder] Shell seeding bypassed or failed, proceeding to app.main():', e);
     } finally {
         overlay?.remove();
     }

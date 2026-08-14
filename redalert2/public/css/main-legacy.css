@@ -2378,8 +2378,10 @@ input[type="range"]:focus {
 #ra2web-root .game-res-box.message-box,
 #ra2web-root .patch-notes-box.message-box,
 #ra2web-root .basic-error-box.message-box {
-    background: rgba(255, 255, 255, .1);
-    border: 2px #8d8d8d outset;
+    background: #14171d;
+    border: 2px solid #a82020;
+    box-shadow: 0 0 24px rgba(0, 0, 0, 0.9);
+    color: #ffffff;
 }
 
 #ra2web-root .game-res-box.message-box,
