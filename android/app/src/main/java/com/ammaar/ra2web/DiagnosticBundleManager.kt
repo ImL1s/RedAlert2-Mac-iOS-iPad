@@ -106,15 +106,49 @@ class DiagnosticBundleManager(private val context: Context) {
 
     fun sanitizeString(input: String): String {
         var result = input
-        // User storage and system path redaction
-        result = result.replace(Regex("""/storage/emulated/\d+/[^\s'"]+"""), "[REDACTED_PATH]")
-        result = result.replace(Regex("""/data/user/\d+/[^\s'"]+"""), "[REDACTED_PATH]")
-        result = result.replace(Regex("""[A-Z]:\\Users\\[^\s'"]+""", RegexOption.IGNORE_CASE), "[REDACTED_PATH]")
-        result = result.replace(Regex("""/Users/[^\s'"]+"""), "[REDACTED_PATH]")
-        result = result.replace(Regex("""/sdcard/[^\s'"]+"""), "[REDACTED_PATH]")
-        // Authorization headers, bearer tokens, secrets, keys redaction
-        result = result.replace(Regex("""(?i)(bearer\s+|token=|\bsecret=|\bpassword=|\bkey=)[A-Za-z0-9\-_.~+/=]{8,}"""), "$1[REDACTED_TOKEN]")
+        // User storage and system path redaction (handles paths with spaces)
+        result = result.replace(Regex("""(["']?)(\/storage\/emulated\/\d+(?:\/[^\r\n"':;]+)*)(\1)"""), "$1[REDACTED_PATH]$1")
+        result = result.replace(Regex("""(["']?)(\/data\/user\/\d+(?:\/[^\r\n"':;]+)*)(\1)"""), "$1[REDACTED_PATH]$1")
+        result = result.replace(Regex("""(["']?)([A-Za-z]:\\Users(?:\\[^\r\n"':;]+)*)(\1)""", RegexOption.IGNORE_CASE), "$1[REDACTED_PATH]$1")
+        result = result.replace(Regex("""(["']?)(\/Users(?:\/[^\r\n"':;]+)*)(\1)"""), "$1[REDACTED_PATH]$1")
+        result = result.replace(Regex("""(["']?)(\/sdcard(?:\/[^\r\n"':;]+)*)(\1)"""), "$1[REDACTED_PATH]$1")
+        // Authorization headers (Basic, Bearer, Digest, etc.)
+        result = result.replace(Regex("""(?i)(authorization:\s*\w+\s+)[^\r\n"'\s,;]+"""), "$1[REDACTED_TOKEN]")
+        // Authorization tokens, secrets, passwords, api keys
+        result = result.replace(Regex("""(?i)(\b(?:bearer|basic)\s+|\b(?:token|secret|password|key|apikey|api_key)=)[A-Za-z0-9\-_.~+/=]{4,}"""), "$1[REDACTED_TOKEN]")
         return result
+    }
+
+    fun shareBundleZip(): Boolean {
+        return try {
+            val cacheDir = context.cacheDir ?: return false
+            var zipFile = File(cacheDir, "diagnostic_bundle.zip")
+            if (!zipFile.exists()) {
+                generateBundleJson()
+                zipFile = File(cacheDir, "diagnostic_bundle.zip")
+            }
+            if (!zipFile.exists()) return false
+
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.fileprovider",
+                zipFile
+            )
+            val intent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "application/zip"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                putExtra(android.content.Intent.EXTRA_SUBJECT, "RedAlert2 Android Diagnostic Bundle")
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            val chooser = android.content.Intent.createChooser(intent, "Share Diagnostic Bundle").apply {
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            context.startActivity(chooser)
+            true
+        } catch (_: Exception) {
+            false
+        }
     }
 
     fun createZipBundle(jsonStr: String, logLines: List<String>): File? {

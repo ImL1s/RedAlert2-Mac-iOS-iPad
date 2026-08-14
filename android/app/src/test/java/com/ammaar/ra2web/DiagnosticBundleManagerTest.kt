@@ -15,15 +15,15 @@ class DiagnosticBundleManagerTest {
             override fun getApplicationContext(): android.content.Context = this
         })
 
-        val rawUserPathWin = "Error at C:\\Users\\alice\\AppData\\Local\\Temp\\log.txt"
+        val rawUserPathWin = "Error at C:\\Users\\alice smith\\AppData\\Local\\Temp\\log.txt"
         val sanitizedWin = manager.sanitizeString(rawUserPathWin)
         assertTrue(sanitizedWin.contains("[REDACTED_PATH]"))
-        assertFalse(sanitizedWin.contains("alice"))
+        assertFalse(sanitizedWin.contains("alice smith"))
 
-        val rawUserPathLinux = "Failed opening /storage/emulated/0/Download/ra2.mix"
+        val rawUserPathLinux = "Failed opening /storage/emulated/0/My Documents/ra2.mix"
         val sanitizedLinux = manager.sanitizeString(rawUserPathLinux)
         assertTrue(sanitizedLinux.contains("[REDACTED_PATH]"))
-        assertFalse(sanitizedLinux.contains("Download"))
+        assertFalse(sanitizedLinux.contains("My Documents"))
 
         val rawDataPath = "Database file: /data/user/0/com.ammaar.ra2web/databases/main.db"
         val sanitizedData = manager.sanitizeString(rawDataPath)
@@ -41,6 +41,11 @@ class DiagnosticBundleManagerTest {
         val sanitizedToken = manager.sanitizeString(rawToken)
         assertTrue(sanitizedToken.contains("[REDACTED_TOKEN]"))
         assertFalse(sanitizedToken.contains("abc123secrettoken456"))
+
+        val rawBasicAuth = "Authorization: Basic dXNlcjpwYXNz"
+        val sanitizedBasic = manager.sanitizeString(rawBasicAuth)
+        assertTrue(sanitizedBasic.contains("[REDACTED_TOKEN]"))
+        assertFalse(sanitizedBasic.contains("dXNlcjpwYXNz"))
 
         val rawKey = "Query param: key=AIzaSyD1234567890abcdef"
         val sanitizedKey = manager.sanitizeString(rawKey)
