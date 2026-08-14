@@ -67,12 +67,17 @@ class WebViewHost @JvmOverloads constructor(
         settings.allowContentAccess = false
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
 
+        val initialThermal = (context as? MainActivity)?.getThermalStateName() ?: "nominal"
+        val initialLowPower = (context as? MainActivity)?.getLowPowerMode() ?: false
+
         val documentStartScript = """
             window.__RA2_SHELL__ = {
                 platform: 'android',
                 version: '0.1.0',
                 isRecovery: $isRecovery,
-                crashCount: $crashCount
+                crashCount: $crashCount,
+                thermalState: '$initialThermal',
+                lowPowerMode: $initialLowPower
             };
         """.trimIndent()
 
@@ -187,6 +192,11 @@ class WebViewHost @JvmOverloads constructor(
                 showErrorState("WebView renderer process crashed repeatedly (${crashRateLimiter.maxCrashes} times in $windowMinutes minutes). Execution halted to prevent infinite crash loops.")
             }
         }
+    }
+
+    fun updateThermalState(thermal: String, lowPower: Boolean) {
+        val js = "window.__RA2_POWER__ && window.__RA2_POWER__({ thermal: '$thermal', lowPower: $lowPower });"
+        evaluateJavascript(js)
     }
 
     fun onDestroy() {
