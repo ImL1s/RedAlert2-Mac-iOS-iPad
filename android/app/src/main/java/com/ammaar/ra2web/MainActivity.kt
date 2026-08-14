@@ -18,6 +18,7 @@ import android.view.WindowManager
 import androidx.activity.OnBackPressedCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.ViewCompat
 import com.ammaar.ra2web.bridge.NativeBridge
 import org.json.JSONObject
 
@@ -64,10 +65,26 @@ class MainActivity : AppCompatActivity(), NativeBridge.SafBridgeHandler {
         webViewHost = WebViewHost(this, safBridgeHandler = this)
         setContentView(webViewHost)
         setupFullscreen()
+        setupSafeAreaInsets()
         setupBackNavigation()
         setupAudioManagement()
         setupThermalAndPowerMonitoring()
         webViewHost.setup()
+    }
+
+    internal fun setupSafeAreaInsets() {
+        ViewCompat.setOnApplyWindowInsetsListener(webViewHost) { _, insets ->
+            val cutout = insets.displayCutout
+            val density = resources.displayMetrics.density
+            val top = (cutout?.safeInsetTop ?: 0)
+            val right = (cutout?.safeInsetRight ?: 0)
+            val bottom = (cutout?.safeInsetBottom ?: 0)
+            val left = (cutout?.safeInsetLeft ?: 0)
+
+            val normalized = SafeAreaHelper.calculateNormalizedInsets(top, right, bottom, left, density)
+            webViewHost.updateSafeAreaInsets(normalized.top, normalized.right, normalized.bottom, normalized.left)
+            insets
+        }
     }
 
     override fun onGetSafStatus(): JSONObject {
