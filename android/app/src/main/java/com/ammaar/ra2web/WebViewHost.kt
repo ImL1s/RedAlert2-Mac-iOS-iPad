@@ -2,12 +2,13 @@ package com.ammaar.ra2web
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.ViewGroup
-import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.webkit.WebViewAssetLoader
 import androidx.webkit.WebViewCompat
@@ -18,12 +19,11 @@ class WebViewHost @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null,
     defStyleAttr: Int = 0,
-    private val safBridgeHandler: NativeBridge.SafBridgeHandler? = null
+    private val safBridgeHandler: NativeBridge.SafBridgeHandler? = null,
+    val crashRateLimiter: CrashRateLimiter = CrashRateLimiter()
 ) : FrameLayout(context, attrs, defStyleAttr) {
 
     private var webView: WebView? = null
-    private var recoveryCount = 0
-    private val maxRecoveryAttempts = 3
     private var isResumed = false
     private var pendingRecovery = false
 
@@ -49,7 +49,7 @@ class WebViewHost @JvmOverloads constructor(
         createAndAttachWebView()
     }
 
-    private fun createAndAttachWebView() {
+    fun createAndAttachWebView(isRecovery: Boolean = false, crashCount: Int = 0) {
         val webViewInstance = WebView(context).apply {
             layoutParams = ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
@@ -70,7 +70,9 @@ class WebViewHost @JvmOverloads constructor(
         val documentStartScript = """
             window.__RA2_SHELL__ = {
                 platform: 'android',
-                version: '0.1.0'
+                version: '0.1.0',
+                isRecovery: $isRecovery,
+                crashCount: $crashCount
             };
         """.trimIndent()
 
@@ -96,7 +98,7 @@ class WebViewHost @JvmOverloads constructor(
         webViewInstance.webViewClient = LocalContentWebViewClient(
             context = context,
             assetLoader = assetLoader,
-            onRenderProcessGoneListener = { didCrash ->
+            onRenderProcessGoneListener = { _ ->
                 handleRenderProcessGone(webViewInstance)
             }
         )
@@ -107,20 +109,25 @@ class WebViewHost @JvmOverloads constructor(
         webViewInstance.loadUrl(BASE_URL)
     }
 
-    private fun handleRenderProcessGone(_deadView: WebView?): Boolean {
-        webView?.let {
+    fun handleRenderProcessGone(deadView: WebView?): Boolean {
+        val targetView = deadView ?: webView
+        targetView?.let {
             (it.parent as? ViewGroup)?.removeView(it)
             it.destroy()
         }
-        webView = null
+        if (targetView == webView) {
+            webView = null
+        }
+
+        val permitted = crashRateLimiter.recordCrashAndCheckPermitted()
+        if (!permitted) {
+            val windowMinutes = crashRateLimiter.windowMillis / 60000
+            showErrorState("WebView renderer process crashed repeatedly (${crashRateLimiter.maxCrashes} times in $windowMinutes minutes). Execution halted to prevent infinite crash loops.")
+            return true
+        }
 
         if (isResumed) {
-            if (recoveryCount < maxRecoveryAttempts) {
-                recoveryCount++
-                createAndAttachWebView()
-            } else {
-                showErrorState("WebView renderer process crashed repeatedly. Execution halted.")
-            }
+            createAndAttachWebView(isRecovery = true, crashCount = crashRateLimiter.getRecentCrashCount())
         } else {
             pendingRecovery = true
         }
@@ -129,13 +136,38 @@ class WebViewHost @JvmOverloads constructor(
 
     private fun showErrorState(message: String) {
         removeAllViews()
-        val errorView = TextView(context).apply {
-            text = message
-            setTextColor(Color.RED)
-            textSize = 16f
-            setPadding(32, 32, 32, 32)
+        val container = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 48, 48, 48)
+            setBackgroundColor(Color.rgb(24, 24, 24))
+            layoutParams = ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+            )
         }
-        addView(errorView)
+
+        val titleView = TextView(context).apply {
+            text = "Renderer Crash"
+            setTextColor(Color.RED)
+            textSize = 20f
+            setTypeface(null, Typeface.BOLD)
+            setPadding(0, 0, 0, 16)
+        }
+        container.addView(titleView)
+
+        val messageView = TextView(context).apply {
+            text = message
+            setTextColor(Color.WHITE)
+            textSize = 14f
+            setPadding(0, 0, 0, 24)
+        }
+        container.addView(messageView)
+
+        addView(container)
+    }
+
+    fun evaluateJavascript(script: String, resultCallback: ((String?) -> Unit)? = null) {
+        webView?.evaluateJavascript(script, resultCallback)
     }
 
     fun onPause() {
@@ -148,17 +180,13 @@ class WebViewHost @JvmOverloads constructor(
         webView?.onResume()
         if (pendingRecovery) {
             pendingRecovery = false
-            if (recoveryCount < maxRecoveryAttempts) {
-                recoveryCount++
-                createAndAttachWebView()
+            if (crashRateLimiter.isRecoveryPermitted()) {
+                createAndAttachWebView(isRecovery = true, crashCount = crashRateLimiter.getRecentCrashCount())
             } else {
-                showErrorState("WebView renderer process crashed repeatedly. Execution halted.")
+                val windowMinutes = crashRateLimiter.windowMillis / 60000
+                showErrorState("WebView renderer process crashed repeatedly (${crashRateLimiter.maxCrashes} times in $windowMinutes minutes). Execution halted to prevent infinite crash loops.")
             }
         }
-    }
-
-    fun evaluateJavascript(script: String, resultCallback: ((String?) -> Unit)? = null) {
-        webView?.evaluateJavascript(script, resultCallback)
     }
 
     fun onDestroy() {
@@ -168,4 +196,11 @@ class WebViewHost @JvmOverloads constructor(
         }
         webView = null
     }
+
+    // Inspection helpers for unit tests and diagnostics
+    fun isResumedForTest(): Boolean = isResumed
+    fun isPendingRecoveryForTest(): Boolean = pendingRecovery
+    fun setResumedForTest(resumed: Boolean) { isResumed = resumed }
+    fun setPendingRecoveryForTest(pending: Boolean) { pendingRecovery = pending }
+    fun getWebViewForTest(): WebView? = webView
 }
